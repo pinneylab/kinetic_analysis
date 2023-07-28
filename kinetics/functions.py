@@ -175,7 +175,7 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
     
         if triage:
 
-            fig, axs = plt.subplots(math.ceil(len(sub_concs) / 2), 2, figsize=(15,15))
+            fig, axs = plt.subplots(math.ceil(len(substrate_concs) / 2), 2, figsize=(15,15))
 
             for ax, data, slope, intercept, sub_conc in zip(axs.flat, kinetic_data, slopes, intercepts, substrate_concs):
                 
