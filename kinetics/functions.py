@@ -10,12 +10,19 @@ class KineticDataException(Exception):
     pass
 
 def divide_chunks(l, n):
-    # Function to split a list 'l' into 'n' roughly equal-sized chunks.
+    # Function to split a list 'l' into 'n' equal-sized chunks.
     # The function yields each chunk as a separate list.
     # It ensures that no chunk is larger than the original list.
-    n = math.ceil(len(l) / float(n))
-    for i in range(0, len(l), n):
-        yield l[i:i + n]
+    chunk_size = len(l) // n
+    remainder = len(l) % n
+    start = 0
+    for i in range(n):
+        if i < remainder:
+            end = start + chunk_size + 1
+        else:
+            end = start + chunk_size
+        yield l[start:end]
+        start = end
 
 def mm_model(x, v_max, Km):
     # Michaelis-Menten equation to model enzyme kinetics.
