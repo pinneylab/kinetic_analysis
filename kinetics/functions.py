@@ -29,7 +29,57 @@ def mm_model(x, v_max, Km):
     # 'x': substrate concentration, 'v_max': maximum reaction rate, 'Km': Michaelis constant.
     return v_max * x / (x + Km)
 
+def compute_exponential_fit(time_arr: np.array,
+                            signal_arr: np.array,
+                            y_intercept: float,
+                            add_linear: bool = False):
+    """
+    Fits an exponential function to the data. The function is of the form:
+    [P]_t = [S]_0 * (1 - e^(-kt))
+    where [P]_t is the product concentration at time t, [S]_0 is the initial substrate concentration,
+    and k is the rate constant.
+    The function returns the rate constant, k.
+        Args:
+        time_arr (np.array): array of assay read times
+        signal_arr (np.array): array of kinetic signal readouts
+        y_intercept (float): y-intercept of the linear fit
+        add_linear (bool): whether to add a linear term to the exponential fit
+    
+    Returns:
+        list of parameters:
+            S0 (float): initial substrate concentration
+            k (float): rate constant
+            c (float): y-intercept
+            evap_rate (float): rate of evaporation and photobleaching
+    """
+    # define the exponential function to fit
+    def exp_func(t, S0, k, e=0):
+        #S0 is our initial substrate concentration
+        #k is our forward reaction rate (assumed to be >> reverse rate)
+        #c is our y-intercept. If the reaction began while we were recording, this would be 0. However, we always have a delay.
+        #evap_rate is the rate of evaporation AND photobleaching. Assumed to be constant over the course of the reaction.
 
+        #return S0 * (1 - np.exp(-k * t)) + c - evap_rate * t
+        return S0 * (1 - np.exp(-k * t)) + y_intercept + e*t
+
+    # fit the exponential function to the data
+    if add_linear: #if we're adding a linear term, we need to provide an initial guess for the slope
+        p0=(100,0,0)
+    else:
+        p0=(100,0)
+    popt, pcov = curve_fit(exp_func, time_arr, signal_arr, p0=p0, method='dogbox') #should we provide the S0, instead of fitting it?
+
+    # plot the original data and the fitted function
+    plt.plot(time_arr, signal_arr, 'b-', label='data')
+    plt.plot(time_arr, exp_func(time_arr, *popt), 'r-', label='fit')
+    plt.title('Exponential fit')
+    plt.legend()
+    plt.show()
+
+    # return the fit parameters:
+    return (*popt, pcov)
+
+    
 def compute_initial_reaction_slope(time_arr: np.array, 
                                    signal_arr: np.array,
                                   min_included_percent: int = 2): 
@@ -123,7 +173,7 @@ def fit_kinetics_linear(row):
 
 def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = False,
                        substrate_concs: [int] = None, 
-                       title: str = None, fig_size: (int, int) = (10,10), triage: bool = False):
+                       title: str = None, fig_size: (int, int) = (10,10), triage: bool = False, mode="linear"):
     
     """
     Fits best initial reaction rate linearly to all kinetic series provided. Optionally plots data for visualization
@@ -137,6 +187,7 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
         title (str): optional title for generated plots
         fig_size ((int, int)): optional dimensions of generated plots
         triage (bool): optional flag to turn on plot "triaging" which separates each substrate's initial rate fitting  
+        mode (str): either "linear" or "exponential" to determine which function to fit to the data
     
     Returns:
         slopes (np.array): array of initial slopes for each sub_array in the kinetic series
@@ -149,12 +200,43 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
     intercepts = []
     scores = []
     
-    for data in kinetic_data:
-        mask = ~np.isnan(data)
-        slope, intercept, score = compute_initial_reaction_slope(time_arr[mask], data[mask])
-        slopes.append(slope)
-        intercepts.append(intercept)
-        scores.append(score)
+    if mode == "linear":
+        for data in kinetic_data:
+            mask = ~np.isnan(data)
+            slope, intercept, score = compute_initial_reaction_slope(time_arr[mask], data[mask])
+            #print(slope, intercept, score)
+            #compute_exponential_fit(time_arr[mask], data[mask])
+            slopes.append(slope)
+            intercepts.append(intercept)
+            scores.append(score)
+    elif mode in ("exponential", "exponential_linear"):
+        for data in kinetic_data:
+            #We want to exclude data after the reaction finishes. We first find the index where the smoothed data is at maximum (max_index)
+            window_size = 10
+            data_smooth = np.convolve(data, np.ones(window_size)/window_size, mode='valid')
+            #make sure we're not losing beginning and end of data
+            data_smooth = np.append(data_smooth, data[-window_size+1:])
+            max_index = np.argmax(data_smooth)
+
+            #we truncate the data to this point:
+            data_trunc = data[:max_index]
+            time_trunc = time_arr[:max_index]
+
+            #calculate the y intercept, and fit:
+            y_intercept = data_trunc[0] #the cheap way to do this is to just use the first data point as the y-intercept
+            if mode=="exponential":
+                S0, k, pcov= compute_exponential_fit(time_trunc, data_trunc, y_intercept)
+            else:
+                S0, k, e, pcov= compute_exponential_fit(time_trunc, data_trunc, y_intercept, add_linear=True)
+            
+            #calculate the slope from substrate conc, rate constant:
+            V0 = S0*k
+    
+            slopes.append(np.array([V0]))
+            intercepts.append(y_intercept)
+            scores.append(pcov)
+    else:
+        raise KineticDataException("Mode must be either 'linear', 'exponential', or 'exponential_linear'")
         
     if plot:
        
