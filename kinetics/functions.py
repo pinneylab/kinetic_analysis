@@ -9,6 +9,100 @@ import matplotlib.cm as cm
 class KineticDataException(Exception):
     pass
 
+class ContinuousLinearRegression:
+    def __init__(self, X, Y):
+        '''
+        This class accepts numpy arrays X and Y, and performs a linear regression on them.
+        When new data is added, it efficiently updates the linear regression, rather than re-running it.
+        Arguments:
+            X: numpy array of x-values
+            Y: numpy array of y-values
+        
+        Example:
+            X = np.array([1,2,3,4,5])
+            Y = np.array([2,4,6,8,10])
+            lr = ContinuousLinearRegression(X, Y)
+            lr.score()
+            >>> 1.0
+            lr.update(np.array([6]), np.array([12]))
+            lr.score()
+            >>> 1.0
+        '''
+        
+        #X, Y are numpy arrays
+        self.x = X
+        self.y = Y
+        self.initialize_internal_vars()
+    
+    def initialize_internal_vars(self):
+        '''
+        Initializes the internal variables used to calculate the linear regression.
+        This should only performed onced, when the initial X,Y data are provided.
+        '''
+
+        self.n = len(self.x)
+        
+        self.x_sum = np.sum(self.x)         #x_sum
+        self.x_squared_sum = np.sum(self.x**2)      #x_squared_sum
+        self.determinant = self.n*self.x_squared_sum - self.x_sum**2  #determinant
+        self.y_sum = np.sum(self.y)         #y_sum
+        self.xy_sum = np.sum(self.x*self.y)  #xy_sum
+        self.y_squared_sum = np.sum(self.y**2)      #y_squared_sum
+        self.y_avg = self.y_sum/self.n
+
+        #slightly more readable:
+        #slope = (n*f-a*e)/D
+        #intercept = (b*e-a*f)/D
+        self.slope = (self.n*self.xy_sum-self.x_sum*self.y_sum)/self.determinant
+        self.intercept = (self.x_squared_sum*self.y_sum-self.x_sum*self.xy_sum)/self.determinant
+
+        self.slope = np.array([self.slope])
+    
+    def slow_score(self):
+        '''
+        Calculates the R2 of the current fit of the data, using the slow method.
+        '''
+
+        y_pred = self.slope*self.x + self.intercept
+        ss_res = np.sum((self.y - y_pred) ** 2)
+        ss_tot = np.sum((self.y - self.y_avg) ** 2)
+        self.r_squared = 1 - (ss_res / ss_tot)
+        return self.r_squared
+
+    def update(self, new_x, new_y):
+        '''
+        Updates the internal variables used to calculate the linear regression.
+        Then, calculates the new slope and intercept.
+        '''
+        self.x = np.append(self.x, new_x)
+        self.y = np.append(self.y, new_y)
+
+        self.n = len(self.x)
+        
+        self.x_sum = self.x_sum + np.sum(new_x)
+        self.x_squared_sum = self.x_squared_sum + np.sum(new_x**2)
+        self.determinant = self.n*self.x_squared_sum - self.x_sum**2
+        self.y_sum = self.y_sum + np.sum(new_y)
+        self.xy_sum = self.xy_sum + np.sum(new_x*new_y)
+        self.y_squared_sum = self.y_squared_sum + np.sum(new_y**2)
+        self.y_avg = self.y_sum/self.n
+
+        #calculate slope and intercept
+        self.slope = (self.n*self.xy_sum-self.x_sum*self.y_sum)/self.determinant
+        self.intercept = (self.x_squared_sum*self.y_sum-self.x_sum*self.xy_sum)/self.determinant
+
+        self.slope = np.array([self.slope])
+    
+    def score(self):
+        '''
+        Calculates the R2 of the current fit of the data.
+        Performs this using the continuously updated variables we establish in the update function.
+        '''
+        SS_res = self.y_squared_sum - 2*self.slope*self.xy_sum - 2*self.intercept*self.y_sum + self.slope**2*self.x_squared_sum + 2*self.slope*self.intercept*self.x_sum + self.n*self.intercept**2
+        SS_tot = self.y_squared_sum - 2*self.y_avg*self.y_sum + self.n*self.y_avg**2
+        self.r_squared = 1 - SS_res/SS_tot
+        return self.r_squared
+
 def divide_chunks(l, n):
     # Function to split a list 'l' into 'n' equal-sized chunks.
     # The function yields each chunk as a separate list.
@@ -32,7 +126,8 @@ def mm_model(x, v_max, Km):
 def compute_exponential_fit(time_arr: np.array,
                             signal_arr: np.array,
                             y_intercept: float,
-                            add_linear: bool = False):
+                            add_linear: bool = False,
+                            plot: bool = False):
     """
     Fits an exponential function to the data. The function is of the form:
     [P]_t = [S]_0 * (1 - e^(-kt))
@@ -69,17 +164,84 @@ def compute_exponential_fit(time_arr: np.array,
         p0=(100,0)
     popt, pcov = curve_fit(exp_func, time_arr, signal_arr, p0=p0, method='dogbox') #should we provide the S0, instead of fitting it?
 
-    # plot the original data and the fitted function
-    plt.plot(time_arr, signal_arr, 'b-', label='data')
-    plt.plot(time_arr, exp_func(time_arr, *popt), 'r-', label='fit')
-    plt.title('Exponential fit')
-    plt.legend()
-    plt.show()
+    if plot:
+        # plot the original data and the fitted function
+        plt.plot(time_arr, signal_arr, 'b-', label='data')
+        plt.plot(time_arr, exp_func(time_arr, *popt), 'r-', label='fit')
+        plt.title('Exponential fit')
+        plt.legend()
+        plt.show()
 
     # return the fit parameters:
     return (*popt, pcov)
 
+def compute_initial_reaction_slope_fast(time_arr: np.array, 
+                                   signal_arr: np.array,
+                                  min_included_percent: int = 2): 
+    """
+    Determines best linear fit to initial slope of data, by fitting regressions to 
+    all percentiles of the data--greater than some defined minimum--anchored at the origin.
+    This new method performs one linear regression and updates it continuously as more data is added, rather than re-running each time.
     
+    Args:
+        time_arr (np.array): array of assay read times
+        signal_arr (np.array): array of kinetic signal readouts
+        min_included_percent (int) = 5: minimum percent of data to be included 
+    
+    Returns:
+        slope, intercept, score ((float, float, float)): fit parameters of best fit
+        
+    """
+    # Need to triage further for different definitions of minimum
+    MIN_INCLUDED_DATA_POINTS = 3
+    
+    perc_concs = list(divide_chunks(signal_arr, 100))
+    perc_times = list(divide_chunks(time_arr, 100))
+ 
+    scores = []
+    slopes = [] 
+    intercepts = []
+    
+    #does this make sense? 
+    min_inclusion = max(len(perc_times) * min_included_percent // 100, MIN_INCLUDED_DATA_POINTS)
+    
+    #Get initial fit:
+    x = np.concatenate(perc_times[:min_inclusion])
+    y = np.concatenate(perc_concs[:min_inclusion])
+
+    reg = ContinuousLinearRegression(x, y)
+    r2 = reg.score()
+    scores.append(r2)
+    slopes.append(reg.slope)
+    intercepts.append(reg.intercept)
+
+    #Update fit as more data is added:
+    for i in range(min_inclusion, len(perc_times)):
+        #add to the end x,y
+        new_x = perc_times[i]
+        new_y = perc_concs[i]
+
+        reg.update(new_x, new_y)
+        r2 = reg.score()
+        scores.append(r2)
+        slopes.append(reg.slope)
+        intercepts.append(reg.intercept)
+    
+    if len(scores) == 0 and min_included_percent == 100:
+        print('Performing regression on all data points')
+        reg = LinearRegression().fit(np.array(perc_times).reshape(-1,1), perc_concs)
+        curr_score = reg.score(np.array(perc_times).reshape(-1,1), perc_concs)
+        return reg.coef_.item(), reg.intercept_.item(), curr_score
+
+    # The fit with the highest R-squared value is selected as the best fit.
+    max_r2_idx = np.argmax(scores)
+    
+    if scores[max_r2_idx] < 0.9:
+        return np.array([np.nan]), np.array([np.nan]), np.array([np.nan])
+
+    #old code expects an array of arrays for slopes. This should be fixed eventually.
+    return slopes[max_r2_idx], intercepts[max_r2_idx], scores[max_r2_idx]
+
 def compute_initial_reaction_slope(time_arr: np.array, 
                                    signal_arr: np.array,
                                   min_included_percent: int = 2): 
@@ -108,7 +270,8 @@ def compute_initial_reaction_slope(time_arr: np.array,
     
     min_inclusion = max(len(perc_times) * min_included_percent // 100, MIN_INCLUDED_DATA_POINTS)
     
-    for i in range(len(perc_times), min_inclusion, -1):
+    #for i in range(len(perc_times), min_inclusion, -1):
+    for i in range(min_inclusion, len(perc_times), 1):
         curr_times = np.concatenate(perc_times[:i])
         curr_concs = np.concatenate(perc_concs[:i])
         reg = LinearRegression().fit(np.array(curr_times).reshape(-1,1), curr_concs)
@@ -187,7 +350,7 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
         title (str): optional title for generated plots
         fig_size ((int, int)): optional dimensions of generated plots
         triage (bool): optional flag to turn on plot "triaging" which separates each substrate's initial rate fitting  
-        mode (str): either "linear" or "exponential" to determine which function to fit to the data
+        mode (str): either "linear", "exponential", or "exponential-linear" to determine which function to fit to the data
     
     Returns:
         slopes (np.array): array of initial slopes for each sub_array in the kinetic series
@@ -200,10 +363,13 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
     intercepts = []
     scores = []
     
-    if mode == "linear":
+    if mode in ("linear", "linear_fast"):
         for data in kinetic_data:
             mask = ~np.isnan(data)
-            slope, intercept, score = compute_initial_reaction_slope(time_arr[mask], data[mask])
+            if mode == "linear":
+                slope, intercept, score = compute_initial_reaction_slope(time_arr[mask], data[mask])
+            else:
+                slope, intercept, score = compute_initial_reaction_slope_fast(time_arr[mask], data[mask])
             #print(slope, intercept, score)
             #compute_exponential_fit(time_arr[mask], data[mask])
             slopes.append(slope)
@@ -211,6 +377,8 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
             scores.append(score)
     elif mode in ("exponential", "exponential_linear"):
         for data in kinetic_data:
+            #Do I need a NaN mask here?
+
             #We want to exclude data after the reaction finishes. We first find the index where the smoothed data is at maximum (max_index)
             window_size = 10
             data_smooth = np.convolve(data, np.ones(window_size)/window_size, mode='valid')
@@ -264,7 +432,7 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
                 ax.scatter(time_arr[:len(time_arr)//5] , data[:len(time_arr)//5])
                 ax.set_title(f"{sub_conc:.2f} µM")
                 ax.plot(x[:len(x)//5], x[:len(x)//5] * slope + intercept)
-           
+    print(slopes)
     return np.concatenate(slopes)
 
 def fit_and_plot_micheaelis_menten(rep_1_slopes: np.array, rep_2_slopes: np.array, sub_concs: [float], 
