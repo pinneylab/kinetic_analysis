@@ -237,7 +237,7 @@ def compute_initial_reaction_slope_fast(time_arr: np.array,
     max_r2_idx = np.argmax(scores)
     
     if scores[max_r2_idx] < 0.9:
-        return np.array([np.nan]), np.array([np.nan]), np.array([np.nan])
+        return np.array([np.nan]),np.nan, np.array([np.nan])
 
     #old code expects an array of arrays for slopes. This should be fixed eventually.
     return slopes[max_r2_idx], intercepts[max_r2_idx], scores[max_r2_idx]
@@ -289,7 +289,7 @@ def compute_initial_reaction_slope(time_arr: np.array,
     max_r2_idx = np.argmax(scores)
     
     if scores[max_r2_idx] < 0.9:
-        return np.array([np.nan]), np.array([np.nan]), np.array([np.nan])
+        return np.array([np.nan]), np.nan, np.array([np.nan])
     
     return slopes[max_r2_idx], intercepts[max_r2_idx], scores[max_r2_idx]
 
