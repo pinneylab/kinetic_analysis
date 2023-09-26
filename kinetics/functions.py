@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from scipy.optimize import curve_fit
+from scipy.special import lambertw
 import matplotlib.cm as cm
 
 class KineticDataException(Exception):
@@ -336,7 +337,7 @@ def fit_kinetics_linear(row):
 
 def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = False,
                        substrate_concs: [int] = None, 
-                       title: str = None, fig_size: (int, int) = (10,10), triage: bool = False, mode="linear"):
+                       title: str = None, fig_size: (int, int) = (10,10), triage: bool = False, mode="linear_fast"):
     
     """
     Fits best initial reaction rate linearly to all kinetic series provided. Optionally plots data for visualization
@@ -350,7 +351,11 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
         title (str): optional title for generated plots
         fig_size ((int, int)): optional dimensions of generated plots
         triage (bool): optional flag to turn on plot "triaging" which separates each substrate's initial rate fitting  
-        mode (str): either "linear", "exponential", or "exponential-linear" to determine which function to fit to the data
+        mode (str): modes for fitting initial slopes.
+            "linear": finds a linear fit to the initial slope of the data
+            "linear_fast": the same method as above, but much faster. This is the default.
+            "exponential": fits an exponential function to all of the data, and calculates the slope from the rate constant
+            "exponential_linear": the same as above, but the exponential function has a linear term added to account for evaporation and photobleaching.
     
     Returns:
         slopes (np.array): array of initial slopes for each sub_array in the kinetic series
@@ -471,3 +476,86 @@ def fit_and_plot_micheaelis_menten(rep_1_slopes: np.array, rep_2_slopes: np.arra
     plt.xlabel(f"[S] ({conc_units})")
     plt.ylabel("v ($s^{-1}$)")
     plt.title(title + " kinetics: $k_{cat}$ = " +f"{params[0] / e_conc:.0f}" + " $s^{-1}$ " + f"  $K_m$ = {params[1]:.0f} {conc_units}")
+
+def fit_michaelis_mentin_lambert_omega(time_arr: np.array, kinetic_data: np.array, plot: bool = False,
+                       substrate_concs: [int] = None, protein_conc: float = None,
+                       title: str = None, fig_size: (int, int) = (10,10), triage: bool = False, model: str = 'integrated_MM'):
+    
+    """
+    Calculates the Michaelis-Menten parameters for the given kinetic data using the Lambert-W function.
+    This function is described in "Parameter estimation using a direct solution of the integrated Michaelis-Menten equation", Gouddar et. al.
+    Args:
+        time_arr (np.array): array of assay read times
+        kinetic_data (np.array): array of kinetic signal readouts
+        plot (bool): flag to turn plotting of fit slopes to scattered data on or off
+        substrate_concs ([int]): optional list of substrate concentrations that must be included if plot==True
+        title (str): optional title for generated plots
+        fig_size ((int, int)): optional dimensions of generated plots
+        triage (bool): optional flag to turn on plot "triaging" which separates each substrate's initial rate fitting  
+    """
+    
+    def integrated_michaelis_menten_equation(time: np.ndarray, Km: float, Vmax: float, s0: float):
+        z = (s0 / Km) * np.exp(np.subtract(s0, Vmax * time) / Km)
+        product_concens = s0 - (Km * np.real(lambertw(z))) # assuming we only have to use the principal real branch
+        return product_concens
+
+    def fitting_function_background(time: np.ndarray, beta: float):
+        return beta * time
+
+    def fitting_function_signal(time: np.ndarray, F0: float, FF: float, Km:float, Vmax: float, s0: float):
+        m = (FF - F0) / s0
+        fluorescence = m * integrated_michaelis_menten_equation(time, Km, Vmax, s0) + F0
+        return fluorescence    
+    
+    F0s, FFs, Kms, kcats, betas, pconvs = [], [], [], [], [], []
+    for i, data in enumerate(kinetic_data):
+        mask = ~np.isnan(data)
+        time_arr_masked = time_arr[mask]
+        data_masked = data[mask]
+        substrate_conc = substrate_concs[i]
+
+        if model == 'integrated_MM':
+            wrapper = lambda time, F0, FF, Km, Vmax: fitting_function_signal(time, F0, FF, Km, Vmax, substrate_conc)
+            lb, ub = np.array([0, 0, 0, 0]), np.array([np.inf, np.inf, np.inf, np.inf])
+            initial_guess = np.array([data_masked[0], data_masked[-1], 1, 0.001])
+            popt, pconv = curve_fit(wrapper, time_arr_masked, data_masked, bounds=(lb, ub), p0=initial_guess)
+
+            # unpack and organize
+            F0, FF, Km, Vmax = popt 
+            F0s.append(F0)
+            FFs.append(FF)
+            Kms.append(Km)
+            kcats.append(Vmax / (protein_conc))
+            betas.append('NA')
+            pconvs.append(pconv)
+
+        elif model == 'integrated_MM_with_background':
+            wrapper = lambda time, F0, FF, Km, Vmax, beta: fitting_function_signal(time, F0, FF, Km, Vmax, substrate_conc) + fitting_function_background(time, beta)
+            lb, ub = np.array([0, 0, 0, 0, -np.inf]), np.array([np.inf, np.inf, np.inf, np.inf, np.inf])
+            initial_guess = np.array([data_masked[0], data_masked[-1], 1, 0.001, 1])
+            popt, pconv = curve_fit(wrapper, time_arr_masked, data_masked, bounds=(lb, ub), p0=initial_guess)
+
+            # unpack and organize
+            F0, FF, Km, Vmax, beta = popt 
+            F0s.append(F0)
+            FFs.append(FF)
+            Kms.append(Km)
+            kcats.append(Vmax / (protein_conc))
+            betas.append(beta)
+            pconvs.append(pconv)
+
+        else:
+            print(f'ERROR: f{model} not recognized as a valid model to fit to. Valid models include "integrated_MM" or "integrated_MM_with_background".')
+            return
+        
+    if plot:
+        #Plot fit of Kcat and Km
+        fig, axs = plt.subplots(1, 2, figsize=(15,5))
+        axs[0].scatter(substrate_concs, kcats)
+        axs[0].set_xlabel('Substrate Concentration (uM)')
+        axs[0].set_ylabel('Kcat (1/s)')
+        axs[0].set_title(title)
+        axs[1].scatter(substrate_concs, Kms)
+        axs[1].set_xlabel('Substrate Concentration (uM)')
+        axs[1].set_ylabel('Km (uM)')
+        axs[1].set_title(title)
