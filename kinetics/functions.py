@@ -437,6 +437,14 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
                 ax.scatter(time_arr[:len(time_arr)//5] , data[:len(time_arr)//5])
                 ax.set_title(f"{sub_conc:.2f} µM")
                 ax.plot(x[:len(x)//5], x[:len(x)//5] * slope + intercept)
+    
+    #Check if any slopes are NaN. If so, output descriptive warning:
+    for i in range(len(slopes)):
+        if np.isnan(slopes[i]):
+            # print(f"WARNING: slope for {substrate_concs[i]} µM is NaN.\n\ 
+            #         This is likely due to scipy failing to fit a linear model to the data.\n")
+            print(f"WARNING: slope for {substrate_concs[i]} µM is NaN.\n This is likely due to scipy failing to fit a linear model to the data.")
+    
     print(slopes)
     return np.concatenate(slopes)
 
