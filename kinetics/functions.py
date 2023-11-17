@@ -359,6 +359,7 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
     
     Returns:
         slopes (np.array): array of initial slopes for each sub_array in the kinetic series
+        scores (np.array): array of R^2 values for each fit (coefficient of determination)
         
     """
     if plot and (substrate_concs is None or title is None):
@@ -404,7 +405,7 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
             
             #calculate the slope from substrate conc, rate constant:
             V0 = S0*k
-    
+
             slopes.append(np.array([V0]))
             intercepts.append(y_intercept)
             scores.append(pcov)
@@ -413,12 +414,19 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
         
     if plot:
        
+        #we'll plot the points in the first 20% of time, for easy visualization.
+        max_time = max(time_arr)
+        twenty_percent_time = max_time * 0.2
+        mask = time_arr < twenty_percent_time
+
         fig = plt.figure(figsize=fig_size) 
         
         for data in kinetic_data:
-            plt.scatter(time_arr, data)
-        x = np.linspace(min(time_arr), max(time_arr), 1000)
-       
+            
+            plt.scatter(time_arr[mask], data[mask])
+            #plt.scatter(time_arr, data)
+        x = np.linspace(min(time_arr[mask]), max(time_arr[mask]), 1000)
+
         x_tiled = np.tile(x,(len(substrate_concs),1)).T
         plt.plot(x_tiled,
                  x_tiled * np.array(slopes).T + np.array(intercepts).T,
@@ -445,8 +453,8 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
             #         This is likely due to scipy failing to fit a linear model to the data.\n")
             print(f"WARNING: slope for {substrate_concs[i]} µM is NaN.\n This is likely due to scipy failing to fit a linear model to the data.")
     
-    print(slopes)
-    return np.concatenate(slopes)
+    #print(slopes)
+    return np.concatenate(slopes), np.concatenate(scores)
 
 def fit_and_plot_micheaelis_menten(rep_1_slopes: np.array, rep_2_slopes: np.array, sub_concs: [float], 
                                    e_conc: float, conc_units: str, title: str, background_rates: np.array = None):
