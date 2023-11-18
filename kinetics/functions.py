@@ -487,11 +487,49 @@ def fit_and_plot_micheaelis_menten(rep_1_slopes: np.array, rep_2_slopes: np.arra
 
     plt.scatter(sub_concs, avg_slopes/e_conc)
     plt.errorbar(sub_concs, np.concatenate(avg_slopes/e_conc), yerr=(errs/e_conc).T, fmt="o", capsize=5)
-    x = np.linspace(0, 4000, 1000)
+    max_substrate = max(sub_concs)
+    x = np.linspace(0, max_substrate, 1000)
     plt.plot(x, mm_model(x, params[0], params[1]) / e_conc)
     plt.xlabel(f"[S] ({conc_units})")
     plt.ylabel("v ($s^{-1}$)")
     plt.title(title + " kinetics: $k_{cat}$ = " +f"{params[0] / e_conc:.0f}" + " $s^{-1}$ " + f"  $K_m$ = {params[1]:.0f} {conc_units}")
+
+def fit_micheaelis_menten(rep_1_slopes: np.array, rep_2_slopes: np.array, sub_concs: [float], 
+                                   e_conc: float, conc_units: str, title: str, background_rates: np.array = None):
+    """
+    Copy of fit_and_plot_micheaelis_menten without plotting functionality, and returning kinetic parameters.
+    In the next release, we should combine the two with a plotting option.
+    
+    Fits provided initial reaction rates and substrate concentrations to the Michaelis-Menten equation.
+    Two replicate must be provided currently (though i will modify this in the future). If you only 
+    have one replicate of data, pass it twice.
+    
+    Args:
+        rep_1_slopes (np.array): array of initial slopes for replicate 1
+        rep_2_slopes (np.array): array of initial slopes for replicate 2
+        sub_concs ([float]): list of substrate concentrations that matches order of samples in each replicate
+        e_conc (float): concentration of enzyme in experiment, must be in same units as sub_concs
+        conc_units (str): unit name for substrate and enzyme concentration
+        title (str): enzyme name/variant/description
+        background_rates (np.array): optional arrays of equal dimensions to one replicate, to be subtracted prior to MM fitting
+    
+    Returns:
+        k_cat (float): turnover rate of enzyme
+        K_m (float): Michaelis constant of enzyme
+        perr (np.array): standard deviation of errors of the parameters
+        
+    """
+    avg_slopes = np.nanmean([rep_1_slopes, rep_2_slopes], axis=0)[..., np.newaxis]
+   
+    if background_rates is not None:
+        avg_slopes -= background_rates
+    errs = np.nanstd([rep_1_slopes, rep_2_slopes], axis=0) 
+    params, pcov = curve_fit(mm_model, sub_concs, np.concatenate(avg_slopes))
+    
+    #compute standard deviation of errors of the parameters:
+    perr = np.sqrt(np.diag(pcov))
+    
+    return params[0] / e_conc, params[1], perr
 
 def fit_michaelis_mentin_lambert_omega(time_arr: np.array, kinetic_data: np.array, plot: bool = False,
                        substrate_concs: [int] = None, protein_conc: float = None,
