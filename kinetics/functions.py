@@ -456,7 +456,7 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
     #print(slopes)
     return np.concatenate(slopes), np.concatenate(scores)
 
-def fit_and_plot_micheaelis_menten(rep_1_slopes: np.array, rep_2_slopes: np.array, sub_concs: [float], 
+def fit_and_plot_michaelis_menten(rep_1_slopes: np.array, rep_2_slopes: np.array, sub_concs: [float], 
                                    e_conc: float, conc_units: str, title: str, background_rates: np.array = None):
     """
     Fits provided initial reaction rates and substrate concentrations to the Michaelis-Menten equation.
@@ -494,7 +494,7 @@ def fit_and_plot_micheaelis_menten(rep_1_slopes: np.array, rep_2_slopes: np.arra
     plt.ylabel("v ($s^{-1}$)")
     plt.title(title + " kinetics: $k_{cat}$ = " +f"{params[0] / e_conc:.0f}" + " $s^{-1}$ " + f"  $K_m$ = {params[1]:.0f} {conc_units}")
 
-def fit_michaelis_mentin(rep_1_slopes: np.array, rep_2_slopes: np.array, sub_concs: [float], 
+def fit_michaelis_menten(rep_1_slopes: np.array, rep_2_slopes: np.array, sub_concs: [float], 
                                    e_conc: float, conc_units: str, title: str, background_rates: np.array = None):
     """
     Copy of fit_and_plot_micheaelis_menten without plotting functionality, and returning kinetic parameters.
@@ -531,7 +531,7 @@ def fit_michaelis_mentin(rep_1_slopes: np.array, rep_2_slopes: np.array, sub_con
     
     return params[0] / e_conc, params[1], perr
 
-def fit_michaelis_mentin_lambert_omega(time_arr: np.array, kinetic_data: np.array, plot: bool = False,
+def fit_michaelis_menten_lambert_omega(time_arr: np.array, kinetic_data: np.array, plot: bool = False,
                        substrate_concs: [int] = None, protein_conc: float = None,
                        title: str = None, fig_size: (int, int) = (10,10), triage: bool = False, model: str = 'integrated_MM'):
     
