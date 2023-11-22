@@ -494,7 +494,7 @@ def fit_and_plot_micheaelis_menten(rep_1_slopes: np.array, rep_2_slopes: np.arra
     plt.ylabel("v ($s^{-1}$)")
     plt.title(title + " kinetics: $k_{cat}$ = " +f"{params[0] / e_conc:.0f}" + " $s^{-1}$ " + f"  $K_m$ = {params[1]:.0f} {conc_units}")
 
-def fit_micheaelis_menten(rep_1_slopes: np.array, rep_2_slopes: np.array, sub_concs: [float], 
+def fit_michaelis_mentin(rep_1_slopes: np.array, rep_2_slopes: np.array, sub_concs: [float], 
                                    e_conc: float, conc_units: str, title: str, background_rates: np.array = None):
     """
     Copy of fit_and_plot_micheaelis_menten without plotting functionality, and returning kinetic parameters.
