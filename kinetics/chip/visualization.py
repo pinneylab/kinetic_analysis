@@ -3,14 +3,47 @@ import base64
 import tempfile
 import numpy as np
 from matplotlib import pyplot as plt
+from pathlib import Path
 
 from dash import Dash, dcc, html, Input, Output, no_update
+from dash import jupyter_dash
+#jupyter_dash.default_mode="external"
 
-def plot_chip(plotting_var, chamber_names, graphing_function=None, title=None):
+
+def plot(db, run_name:str, analysis_name:str, plotting_var:str, title:str=None):
     ''' This function creates a Dash visualization of a chip, based on a certain Run (run_name)
         Inputs:
-            plotting_var: a dictionary mapping chamber_id to the variable to be plotted for that chamber
-            chamber_names: a dictionary mapping chamber_id to the name of the sample in the chamber (e.g. '1,1': ecADK_XYZ')
+            db: a Database object
+            run_name: the name of the run to analyze
+            analysis_name: the name of the analysis to perform
+            plotting_var: the variable to be plotted for each chamber
+            title: a string to be used as the title of the plot
+
+    '''
+
+    jupyter_dash.infer_jupyter_proxy_config()
+
+    #get mapping of coord to chamber name:
+    chamber_coords = db.get_chamber_coords()
+    chamber_names = db.get_chamber_names()
+    chamber_names_dict = {chamber_coords[i]: chamber_names[i] for i in range(len(chamber_coords))}
+
+    #get the analysis:
+    analysis_chambers = db.get(Path('runs')/run_name/'analyses'/analysis_name/'chambers')
+
+    #get the plotting values:
+    plotting_values = {}
+    for chamber_coord, chamber_name in chamber_names_dict.items():
+        plotting_values[chamber_coord] = analysis_chambers[chamber_coord][plotting_var]
+    
+    #plot the chip:chamber_names_dict
+    _plot_chip(plotting_values, chamber_names_dict, title=title)
+
+def _plot_chip(plotting_values, chamber_names, graphing_function=None, title=None):
+    ''' This function creates a Dash visualization of a chip, based on a certain Run (run_name)
+        Inputs:
+            plotting_values: a dictionary mapping chamber_coord to the variable to be plotted for that chamber
+            chamber_names: a dictionary mapping chamber_coord to the name of the sample in the chamber (e.g. '1,1': ecADK_XYZ')
             graphing_function: a function that takes in a single chamber_id (e.g. '1,1') and matplotlib axis and returns the axis object after plotting.
             title: a string to be used as the title of the plot
         TODO: make all the variables stored in Dash properly...
@@ -19,7 +52,7 @@ def plot_chip(plotting_var, chamber_names, graphing_function=None, title=None):
     #NB: eventually, store width/height in DB and reference!
     img_array = np.zeros([56,32])
 
-    for chamber_id, value in plotting_var.items():
+    for chamber_id, value in plotting_values.items():
         x = int(chamber_id.split(',')[0])
         y = int(chamber_id.split(',')[1])
         img_array[y-1,x-1] = value 
@@ -88,5 +121,5 @@ def plot_chip(plotting_var, chamber_names, graphing_function=None, title=None):
                 style={'width': '400px', 'white-space': 'none'})
             ]
             return True, bbox, children
-
-    app.run_server()
+    #app.run_server(jupyter_mode="inline", debug=False)
+    return app
