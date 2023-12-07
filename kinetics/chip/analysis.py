@@ -5,7 +5,27 @@ import numpy as np
 from matplotlib import pyplot as plt
 import scipy
 
-def linear_regression_analysis(db, run_name):
+def new_analysis(db, run_name, analysis_name, analysis_type):
+    ''' This function performs a new analysis on the data in the database.
+        Inputs:
+            db: a Database object
+            run_name: the name of the run to analyze
+            analysis_name: the name of the analysis to perform
+            analysis_type: the type of analysis to perform
+                supported types: 'linear_regression'
+        Outputs:
+            None
+        Side effects:
+            Saves the analysis to the database.
+    '''
+
+    if analysis_name == 'linear_regression':
+        _linear_regression_analysis(db, run_name)
+    else:
+        raise ValueError(f'Analysis name {analysis_name} not recognized.')
+
+
+def _linear_regression_analysis(db, run_name):
     ''' This function performs a linear regression analysis on the data in the database.
         Inputs:
             db: a Database object
