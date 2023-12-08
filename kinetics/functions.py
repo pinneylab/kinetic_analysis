@@ -124,6 +124,24 @@ def mm_model(x, v_max, Km):
     # 'x': substrate concentration, 'v_max': maximum reaction rate, 'Km': Michaelis constant.
     return v_max * x / (x + Km)
 
+def get_inhibition_model_fx(v_0):
+    '''
+    This returns a lambda function to optimize using scipy.optimize.curve_fit.
+        We need to use a lambda function here becauase we need to pass in a parameter, v_0, but not fit it.
+    This function yields reaction velocity from inhibitor concentration.
+    'x': substrate concentration, 
+    'v_max': maximum reaction rate, 
+    'Km': Michaelis constant.
+    'Ki': inhibition constant
+    'v_0': initial velocity
+    '''
+    def inhibition_model(x, Ki, v_0):
+        return v_0 / (1 + (x / Ki))
+    
+    #insert given parameters, and return KI function:
+    Ki_func = lambda a, b : inhibition_model(a, b, v_0)
+    return Ki_func
+
 def compute_exponential_fit(time_arr: np.array,
                             signal_arr: np.array,
                             y_intercept: float,
@@ -525,6 +543,47 @@ def fit_michaelis_menten(rep_1_slopes: np.array, rep_2_slopes: np.array, sub_con
         avg_slopes -= background_rates
     errs = np.nanstd([rep_1_slopes, rep_2_slopes], axis=0) 
     params, pcov = curve_fit(mm_model, sub_concs, np.concatenate(avg_slopes))
+    
+    #compute standard deviation of errors of the parameters:
+    perr = np.sqrt(np.diag(pcov))
+    
+    return params[0] / e_conc, params[1], perr
+
+def fit_inhibition_constant(rep_1_slopes: np.array, rep_2_slopes: np.array, inhibitor_concs: [float], 
+                                   e_conc: float, conc_units: str, title: str, background_rates: np.array = None):
+    """
+    Copy of fit_and_plot_micheaelis_menten without plotting functionality, and returning kinetic parameters.
+    In the next release, we should combine the two with a plotting option.
+    
+    Fits provided initial reaction rates and substrate concentrations to the Michaelis-Menten equation.
+    Two replicate must be provided currently (though i will modify this in the future). If you only 
+    have one replicate of data, pass it twice.
+    
+    Args:
+        rep_1_slopes (np.array): array of initial slopes for replicate 1
+        rep_2_slopes (np.array): array of initial slopes for replicate 2
+        inhibitor_concs ([float]): list of substrate concentrations that matches order of samples in each replicate
+        e_conc (float): concentration of enzyme in experiment, must be in same units as sub_concs
+        conc_units (str): unit name for substrate and enzyme concentration
+        title (str): enzyme name/variant/description
+        background_rates (np.array): optional arrays of equal dimensions to one replicate, to be subtracted prior to MM fitting
+    
+    Returns:
+        K_i (float): inhibition constant of enzyme
+        perr (np.array): standard deviation of errors of the parameters
+    """
+    avg_slopes = np.nanmean([rep_1_slopes, rep_2_slopes], axis=0)[..., np.newaxis]
+    if background_rates is not None:
+        avg_slopes -= background_rates
+
+    #get v_0
+    initial_slope = avg_slopes[0]
+    
+    errs = np.nanstd([rep_1_slopes, rep_2_slopes], axis=0) 
+
+    #get inhibition function and fit:
+    Ki_func = get_inhibition_model_fx(initial_slope)
+    params, pcov = curve_fit(Ki_func, inhibitor_concs, np.concatenate(avg_slopes))
     
     #compute standard deviation of errors of the parameters:
     perr = np.sqrt(np.diag(pcov))
