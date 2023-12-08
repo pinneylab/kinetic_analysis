@@ -588,7 +588,7 @@ def fit_inhibition_constant(rep_1_slopes: np.array, rep_2_slopes: np.array, inhi
     #compute standard deviation of errors of the parameters:
     perr = np.sqrt(np.diag(pcov))
     
-    return params[0] / e_conc, params[1], perr
+    return params[0] / e_conc, perr
 
 def fit_michaelis_menten_lambert_omega(time_arr: np.array, kinetic_data: np.array, plot: bool = False,
                        substrate_concs: [int] = None, protein_conc: float = None,
