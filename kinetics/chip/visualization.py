@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 from pathlib import Path
 
 from dash import Dash, dcc, html, Input, Output, no_update
-from dash import jupyter_dash
+#from dash import jupyter_dash
 #jupyter_dash.default_mode="external"
 
 
@@ -21,7 +21,7 @@ def plot(db, run_name:str, analysis_name:str, plotting_var:str, title:str=None):
 
     '''
 
-    jupyter_dash.infer_jupyter_proxy_config()
+    #jupyter_dash.infer_jupyter_proxy_config()
 
     #get mapping of coord to chamber name:
     chamber_coords = db.get_chamber_coords()
@@ -31,12 +31,17 @@ def plot(db, run_name:str, analysis_name:str, plotting_var:str, title:str=None):
     #get the analysis:
     analysis_chambers = db.get(Path('runs')/run_name/'analyses'/analysis_name/'chambers')
 
+    #convert serialized values to Quantity objects:
+    analysis_chambers = db._make_quantities_from_serialized_dict(analysis_chambers)
+
     #get the plotting values:
     plotting_values = {}
     for chamber_coord, chamber_name in chamber_names_dict.items():
         plotting_values[chamber_coord] = analysis_chambers[chamber_coord][plotting_var]
     
     #plot the chip:chamber_names_dict
+    if title is not None:
+        title = title + ': ' + plotting_var
     _plot_chip(plotting_values, chamber_names_dict, title=title)
 
 def _plot_chip(plotting_values, chamber_names, graphing_function=None, title=None):
@@ -53,9 +58,13 @@ def _plot_chip(plotting_values, chamber_names, graphing_function=None, title=Non
     img_array = np.zeros([56,32])
 
     for chamber_id, value in plotting_values.items():
+        #make sure it's a single value, not an array:
+        magnitude = value.magnitude
         x = int(chamber_id.split(',')[0])
         y = int(chamber_id.split(',')[1])
-        img_array[y-1,x-1] = value 
+        img_array[y-1,x-1] = magnitude 
+    #add back the units:
+    img_array = img_array * value.units
     
     #generate title
     if title is None:
@@ -63,7 +72,8 @@ def _plot_chip(plotting_values, chamber_names, graphing_function=None, title=Non
     
     #Create the figure
     layout = go.Layout()
-    fig = go.Figure(layout=layout, data=go.Heatmap(z=img_array, colorscale='Viridis'))
+    fig = go.Figure(layout=layout, data=go.Heatmap(z=img_array, colorscale='Viridis',
+                                                   colorbar = dict(title=str(value.units))))
     #center title in fig
     fig.update_layout(title=title,
                         title_x=0.5, 
@@ -94,6 +104,7 @@ def _plot_chip(plotting_values, chamber_names, graphing_function=None, title=Non
         def display_hover(hoverData):
             if hoverData is None:
                 return False, no_update, no_update
+            print(hoverData)
             # demo only shows the first point, but other points may also be available
             pt = hoverData["points"][0]
             chamber_id = str(pt['x']+1) + ',' + str(pt['y']+1)
@@ -122,4 +133,5 @@ def _plot_chip(plotting_values, chamber_names, graphing_function=None, title=Non
             ]
             return True, bbox, children
     #app.run_server(jupyter_mode="inline", debug=False)
-    return app
+    #return app
+    app.run_server()
