@@ -5,6 +5,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 import scipy
 import pint 
+from pathlib import Path
 
 ureg = pint.UnitRegistry()
 
@@ -24,6 +25,8 @@ def new_analysis(db, run_name, analysis_name, analysis_type):
 
     if analysis_name == 'linear_regression':
         _linear_regression_analysis(db, run_name)
+    elif analysis_name == 'enzyme_concentration':
+        _enzyme_concentration_analysis(db, run_name)
     else:
         raise ValueError(f'Analysis name {analysis_name} not recognized.')
 
@@ -50,6 +53,45 @@ def _linear_regression_analysis(db, run_name):
         #perform linear regression:
         slope, intercept, r_value, p_value, std_err = quantity_linregress(conc_data, luminance_data_for_current_chamber)
         linear_regression_analysis_dict[chamber_coord] = {'slope': slope, 'intercept': intercept, 'r_value': r_value, 'r2':r_value**2, 'p_value': p_value, 'std_err': std_err}
+
+    #store the analysis in the database:
+    db.save_new_analysis('standard_0', 'linear_regression', linear_regression_analysis_dict)
+
+def _enzyme_concentration_analysis(db, run_name, analysis_name='linear_regression'):
+    ''' This function uses slope data from a standard_curve linear regression
+         to calculate the enzyme concentraton for each well.
+        Inputs:
+            db: a Database object
+        Outputs:
+            None
+        Side effects:
+            Saves the analysis to the database.
+    '''
+    # ### Collect slope data:
+    #Oops! This is used to calculate product conc. not enzyme conc.
+    # #make temporary copy of data:
+    # linear_regression_chamber_dict = db.get(Path('runs')/run_name/'analyses'/analysis_name/'chambers')
+    # linear_regression_chamber_dict = db._make_quantities_from_serialized_dict(linear_regression_chamber_dict)
+    # #concatenate all the slope quantities:
+    # slope_quantities = [linear_regression_chamber_dict[i]['slope'] for i in linear_regression_chamber_dict.keys()]
+    # # Assuming `slope_quantities` is the list of quantities
+    # slope_array = np.array([q.magnitude for q in slope_quantities]) * slope_quantities[0].units
+    
+    button_quant_no_background = np.array([])
+    button_quant_unit = None
+    chamber_dict = db.get(f'button_quant/')
+    chamber_dict = db._make_quantities_from_serialized_dict(chamber_dict)
+    for chamber_coord in chamber_coords:
+        button_quant_no_background = np.append(button_quant_no_background, chamber_dict[chamber_coord]['summed_button_BGsub_Button_Quant'].magnitude)
+        if button_quant_unit is None:
+            button_quant_unit = chamber_dict[chamber_coord]['summed_button_BGsub_Button_Quant'].units
+    button_quant_no_background = button_quant_no_background * button_quant_unit
+    ### Calculate enzyme conc:
+    #Here, we collect our data into numpy arrays
+    chamber_idxs, luminance_data, conc_data, _ = db.get_run_data(run_name)
+
+    #For each chamber, we perform a linear regression and store in our analysis.
+    #We'll store this temporarily in a dictionary, keyed by each chamber coord (e.g. '1,1')
 
     #store the analysis in the database:
     db.save_new_analysis('standard_0', 'linear_regression', linear_regression_analysis_dict)
