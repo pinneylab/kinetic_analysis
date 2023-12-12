@@ -10,7 +10,7 @@ from dash import Dash, dcc, html, Input, Output, no_update
 #jupyter_dash.default_mode="external"
 
 
-def plot(db, run_name:str, analysis_name:str, plotting_var:str, title:str=None):
+def plot(db, run_name:str, analysis_name:str, plotting_var:str, title:str=None, hover_data:tuple=None):
     ''' This function creates a Dash visualization of a chip, based on a certain Run (run_name)
         Inputs:
             db: a Database object
@@ -18,9 +18,10 @@ def plot(db, run_name:str, analysis_name:str, plotting_var:str, title:str=None):
             analysis_name: the name of the analysis to perform
             plotting_var: the variable to be plotted for each chamber
             title: a string to be used as the title of the plot
+            hover_data: a tuple of (x_data, y_data) where x_data and y_data are the names 
+                of the variables from the run to be plotted when hovering over a chamber 
 
     '''
-
     #jupyter_dash.infer_jupyter_proxy_config()
 
     #get mapping of coord to chamber name:
@@ -28,11 +29,12 @@ def plot(db, run_name:str, analysis_name:str, plotting_var:str, title:str=None):
     chamber_names = db.get_chamber_names()
     chamber_names_dict = {chamber_coords[i]: chamber_names[i] for i in range(len(chamber_coords))}
 
-    #get the analysis:
-    analysis_chambers = db.get(Path('runs')/run_name/'analyses'/analysis_name/'chambers')
+    #get a copy of the full run dict: 
+    run_dict = db.get(Path('runs')/run_name)
+    run_dict = db._make_quantities_from_serialized_dict(run_dict)
 
-    #convert serialized values to Quantity objects:
-    analysis_chambers = db._make_quantities_from_serialized_dict(analysis_chambers)
+    #get the analysis:
+    analysis_chambers = run_dict['analyses'][analysis_name]['chambers']
 
     #get the plotting values:
     plotting_values = {}
@@ -42,7 +44,25 @@ def plot(db, run_name:str, analysis_name:str, plotting_var:str, title:str=None):
     #plot the chip:chamber_names_dict
     if title is not None:
         title = title + ': ' + plotting_var
-    _plot_chip(plotting_values, chamber_names_dict, title=title)
+    
+    graphing_function = None
+    if hover_data is not None:
+        x_data, y_data = hover_data
+        def graphing_function(chamber_id, ax):
+            #as a general rule, our x-data will be  stored at the assay level, (e.g. time) 
+            # and our y-data will be stored at the chamber level (e.g. fluorescence)
+            x = np.array([])
+            y = np.array([])
+            assays = run_dict['assays'].keys()
+            #here, we gather x and y data for each assay:
+            for assay in assays:
+                x = np.append(x, run_dict['assays'][assay][x_data])
+                chamber_dict = run_dict['assays'][assay]['chambers'][chamber_id]
+                y = np.append(y, chamber_dict[y_data])
+            ax.plot(x, y)
+            return ax
+    
+    _plot_chip(plotting_values, chamber_names_dict, title=title, graphing_function=graphing_function)
 
 def _plot_chip(plotting_values, chamber_names, graphing_function=None, title=None):
     ''' This function creates a Dash visualization of a chip, based on a certain Run (run_name)
@@ -104,7 +124,6 @@ def _plot_chip(plotting_values, chamber_names, graphing_function=None, title=Non
         def display_hover(hoverData):
             if hoverData is None:
                 return False, no_update, no_update
-            print(hoverData)
             # demo only shows the first point, but other points may also be available
             pt = hoverData["points"][0]
             chamber_id = str(pt['x']+1) + ',' + str(pt['y']+1)
