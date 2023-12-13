@@ -569,7 +569,7 @@ def fit_inhibition_constant(rep_1_slopes: np.array, rep_2_slopes: np.array, inhi
         background_rates (np.array): optional arrays of equal dimensions to one replicate, to be subtracted prior to MM fitting
     
     Returns:
-        K_i (float): inhibition constant of enzyme
+        K_i/E (float): inhibition constant of enzyme, dividied by enzyme conc.
         perr (np.array): standard deviation of errors of the parameters
     """
     avg_slopes = np.nanmean([rep_1_slopes, rep_2_slopes], axis=0)[..., np.newaxis]
@@ -589,6 +589,23 @@ def fit_inhibition_constant(rep_1_slopes: np.array, rep_2_slopes: np.array, inhi
     perr = np.sqrt(np.diag(pcov))
     
     return params[0] / e_conc, perr
+
+def apply_cheng_prusoff(K_i: float, K_m: float, substrate_conc:float, conc_units: str):
+    """
+    Applies the Cheng-Prusoff equation to correct the K_i using the provided K_m and e_conc.
+
+    Args:
+        inhibitor_concs ([float]): list of inhibitor concentrations
+        K_i (float): inhibition constant
+        K_m (float): Michaelis constant
+        e_conc (float): enzyme concentration
+        conc_units (str): unit name for substrate and enzyme concentration
+
+    Returns:
+        K_i_prime (float): corrected inhibition constant
+    """
+    K_i_prime = K_i / (1 + (substrate_conc/K_m))
+    return K_i_prime
 
 def fit_michaelis_menten_lambert_omega(time_arr: np.array, kinetic_data: np.array, plot: bool = False,
                        substrate_concs: [int] = None, protein_conc: float = None,
