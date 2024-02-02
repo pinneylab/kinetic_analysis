@@ -222,11 +222,15 @@ def compute_initial_reaction_slope_fast(time_arr: np.array,
     intercepts = []
     
     #does this make sense? 
-    min_inclusion = max(len(perc_times) * min_included_percent // 100, MIN_INCLUDED_DATA_POINTS)
+    # this functionality is behaving weirdly. I think the weird behavior is coming from the percetile vs num points conversion.
+    # we want there to be always a minimum of 3 points.
+    min_percent_points = len(signal_arr) * min_included_percent // 100
+    min_inclusion_points = max(min_percent_points, MIN_INCLUDED_DATA_POINTS)
+    min_percentiles = int(min_inclusion_points // len(perc_times[0]))
     
     #Get initial fit:
-    x = np.concatenate(perc_times[:min_inclusion])
-    y = np.concatenate(perc_concs[:min_inclusion])
+    x = np.concatenate(perc_times[:min_percentiles])
+    y = np.concatenate(perc_concs[:min_percentiles])
 
     reg = ContinuousLinearRegression(x, y)
     r2 = reg.score()
@@ -235,7 +239,7 @@ def compute_initial_reaction_slope_fast(time_arr: np.array,
     intercepts.append(reg.intercept)
 
     #Update fit as more data is added:
-    for i in range(min_inclusion, len(perc_times)):
+    for i in range(min_percentiles, len(perc_times)):
         #add to the end x,y
         new_x = perc_times[i]
         new_y = perc_concs[i]
@@ -254,7 +258,7 @@ def compute_initial_reaction_slope_fast(time_arr: np.array,
 
     # The fit with the highest R-squared value is selected as the best fit.
     max_r2_idx = np.argmax(scores)
-    
+    #print("max_r2_idx", max_r2_idx)
     if scores[max_r2_idx] < 0.9:
         return np.array([np.nan]),np.nan, np.array([np.nan])
 
