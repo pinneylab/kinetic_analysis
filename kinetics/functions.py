@@ -3,50 +3,141 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 from scipy.optimize import curve_fit
 from scipy.special import lambertw
+import multiprocessing
+from tqdm import tqdm
 
 
-def single_exponential(x: np.ndarray, k: float, span: float, plateau: float):
-    return (span * np.exp(k * x)) + plateau
-
-
-def fit_single_exponential(x: np.ndarray, y: np.ndarray):
-    
-    # compute initial guesses
-    plateau0 = y[-1]
-    span0 = y[0] - plateau0
-    
-    mask = (y > plateau0) & (x > 0)
-    k0 = (np.log((y[mask] - plateau0) / span0) / x[mask]).mean()
-    p0 = np.array([k0, span0, plateau0])
-
-    # compute fit
-    popt, pconv = curve_fit(single_exponential, x, y, p0=p0)
-    
-    return popt, pconv
-
-
-def mm_model(s: np.ndarray, v_max: float, Km: float):
-    return v_max * s / (s + Km)
-
-
-def fit_michaelis_menten(s: np.ndarray, rates: np.ndarray):
+class SingleExponentialModel:
+    """ 
+    Class for fitting exponential models to progress curve data.
     """
-    Function for fitting a Michaelis-Menten model to initial rate data.
+
+    def __init__(self, x: np.ndarray, y: np.ndarray):
+        self.x = x
+        self.y = y
+        self.k, self.span, self.plateau = float, float, float
+        self.pcov = np.ndarray
+
+    def __call__(self, x: np.ndarray):
+        return SingleExponentialModel.single_exponential(x, self.k, self.span, self.plateau)
+    
+    @staticmethod
+    def single_exponential(x: np.ndarray, k: float, span: float, plateau: float):
+        return (span * np.exp(k * x)) + plateau
+    
+    def set_params(self, params):
+        self.k, self.span, self.plateau = params
+
+    def compute_cov(self):
+        """ 
+        Placeholder for method for calculating covariance of an input set of
+        """
+        pass
+    
+    def fit(self):
+
+        # compute initial guesses
+        plateau0 = self.y[-1]
+        span0 = self.y[0] - plateau0
+        
+        mask = (self.y > plateau0) & (self.x > 0)
+        k0 = (np.log((self.y[mask] - plateau0) / span0) / self.x[mask]).mean()
+        p0 = np.array([k0, span0, plateau0])
+
+        # compute fit
+        popt, pcov = curve_fit(SingleExponentialModel.single_exponential, self.x, self.y, p0=p0)
+        self.set_params(popt)
+        self.pcov = pcov
+
+
+class MMModel:
+    """ 
+    Class for fitting Michaelis-Menten models to initial rate data.
+    """
+
+    def __init__(self, x: np.ndarray, y: np.ndarray):
+        self.x = x
+        self.y = y
+        self.vmax, self.km = float, float
+        self.pcov = np.ndarray
+
+    def __call__(self, x: np.ndarray):
+        return MMModel.mm_model(x, self.vmax, self.km)
+    
+    @staticmethod
+    def mm_model(s: np.ndarray, v_max: float, Km: float):
+        return v_max * s / (s + Km)
+    
+    def set_params(self, params):
+        self.vmax, self.km = params
+
+    def fit(self):
+        popt, pcov = curve_fit(MMModel.mm_model, self.x, self.y)
+        self.set_params(popt)
+        self.pcov = pcov 
+
+
+class LinearModel:
+    """ 
+    Class for fitting linear models to progress curve data.
+    """
+
+    def __init__(self, x: np.ndarray, y: np.ndarray):
+        self.x = x
+        self.y = y
+        self.m, self.b = float, float
+        self.pcov = np.ndarray
+
+    def __call__(self, x: np.ndarray):
+        return (x * self.m) + self.b
+    
+    def set_params(self, params):
+        self.m, self.b = params
+
+    def compute_cov(self):
+        """ 
+        Placeholder for method for calculating covariance of an input set of
+        """
+        pass
+    
+    def fit(self, return_self: bool = False):
+
+        # compute initial guesses
+        plateau0 = self.y[-1]
+        span0 = self.y[0] - plateau0
+        
+        mask = (self.y > plateau0) & (self.x > 0)
+        k0 = (np.log((self.y[mask] - plateau0) / span0) / self.x[mask]).mean()
+        p0 = np.array([k0, span0, plateau0])
+
+        # compute fit
+        popt, pcov = curve_fit(SingleExponentialModel.single_exponential, self.x, self.y, p0=p0)
+        self.set_params(popt)
+        self.pcov = pcov
+
+        if return_self:
+            return self
+
+
+def task(model):
+    return model.fit(return_self=True)
+
+
+def fit_models_parallel(models: list, n_cpus: int = 2):
+    """
+    Function for parallelizing fitting across multiple CPUs on the same device.
 
     Parameters:
-        s (np.ndarray): array of substrate concentrations.
-        rates (np.ndarray): array of initial rates (that should not be
-            normalized by enzyme concentration).
-
-    Returns:
-        popt (np.ndarray): array containing values of Vmax and Km.
-        pcov (np.ndarray): covariance matrix describing errors in the fit. 
-        
+        models (list): a list of model objects.
+        n_cpus (int): the number of CPUs to parallelize fitting calculations
+            across. you can determine the number of available CPUs on your
+            system with os.cpu_count()
     """
 
-    popt, pcov = curve_fit(mm_model, s, rates)
-    
-    return popt, pcov
+    with multiprocessing.Pool(processes=n_cpus) as pool:
+        results = list(tqdm(pool.imap(task, models), total=len(models)))
+
+    return results
 
 
 class KineticDataException(Exception):
