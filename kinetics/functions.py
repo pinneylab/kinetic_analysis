@@ -231,7 +231,7 @@ def compute_initial_reaction_slope_fast(time_arr: np.array,
     #Get initial fit:
     x = np.concatenate(perc_times[:min_percentiles])
     y = np.concatenate(perc_concs[:min_percentiles])
-
+    
     reg = ContinuousLinearRegression(x, y)
     r2 = reg.score()
     scores.append(r2)
@@ -259,11 +259,11 @@ def compute_initial_reaction_slope_fast(time_arr: np.array,
     # The fit with the highest R-squared value is selected as the best fit.
     max_r2_idx = np.argmax(scores)
     #print("max_r2_idx", max_r2_idx)
-    if scores[max_r2_idx] < 0.9:
-        return np.array([np.nan]),np.nan, np.array([np.nan])
+    # if scores[max_r2_idx] < 0.9:
+    #     return np.array([np.nan]),np.nan, np.array([np.nan])
 
     #old code expects an array of arrays for slopes. This should be fixed eventually.
-    return slopes[max_r2_idx], intercepts[max_r2_idx], scores[max_r2_idx]
+    return slopes[max_r2_idx], intercepts[max_r2_idx], scores[max_r2_idx], np.array([0, len(x)])
 
 def compute_initial_reaction_slope(time_arr: np.array, 
                                    signal_arr: np.array,
@@ -281,6 +281,9 @@ def compute_initial_reaction_slope(time_arr: np.array,
         slope, intercept, score ((float, float, float)): fit parameters of best fit
         
     """
+    raise NotImplementedError("This function is not currently supported. Please use compute_initial_reaction_slope_fast instead.")
+    # NOTE: (DFM 4/29/24) We need to return the time indices of the data used in the fit. This is not currently implemented.
+
     # Need to triage further for different definitions of minimum
     MIN_INCLUDED_DATA_POINTS = 3
     
@@ -390,20 +393,24 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
     slopes = []
     intercepts = []
     scores = []
-    
+    reg_idxs = []
     if mode in ("linear", "linear_fast"):
         for data in kinetic_data:
             mask = ~np.isnan(data)
             if mode == "linear":
                 slope, intercept, score = compute_initial_reaction_slope(time_arr[mask], data[mask])
             else:
-                slope, intercept, score = compute_initial_reaction_slope_fast(time_arr[mask], data[mask])
+                #print(compute_initial_reaction_slope_fast(time_arr[mask], data[mask]))
+                slope, intercept, score, idxs = compute_initial_reaction_slope_fast(time_arr[mask], data[mask])
             #print(slope, intercept, score)
             #compute_exponential_fit(time_arr[mask], data[mask])
             slopes.append(slope)
-            intercepts.append(intercept)
+            intercepts.append([intercept]) # this was needed to maintain array shape
             scores.append(score)
+            reg_idxs.append(idxs)
+
     elif mode in ("exponential", "exponential_linear"):
+        raise NotImplementedError("Exponential fitting is not currently supported.")
         for data in kinetic_data:
             #Do I need a NaN mask here?
 
@@ -474,9 +481,9 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
             # print(f"WARNING: slope for {substrate_concs[i]} µM is NaN.\n\ 
             #         This is likely due to scipy failing to fit a linear model to the data.\n")
             print(f"WARNING: slope for {substrate_concs[i]} µM is NaN.\n This is likely due to scipy failing to fit a linear model to the data.")
-    
-    #print(slopes)
-    return np.concatenate(slopes), np.concatenate(scores)
+
+   
+    return np.concatenate(slopes), np.concatenate(scores), np.concatenate(intercepts), reg_idxs
 
 def fit_and_plot_michaelis_menten(rep_1_slopes: np.array, rep_2_slopes: np.array, sub_concs: [float], 
                                    e_conc: float, conc_units: str, title: str, background_rates: np.array = None):
