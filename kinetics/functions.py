@@ -6,6 +6,7 @@ from sklearn.linear_model import LinearRegression
 from scipy.optimize import curve_fit
 from scipy.special import lambertw
 import matplotlib.cm as cm
+import pint
 
 class KineticDataException(Exception):
     pass
@@ -484,6 +485,26 @@ def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = 
 
    
     return np.concatenate(slopes), np.concatenate(scores), np.concatenate(intercepts), reg_idxs
+
+def get_initial_slopes_quantities(time_arr: pint.Quantity, kinetic_data: pint.Quantity, plot: bool = False,
+                       substrate_concs: pint.Quantity = None, 
+                       title: str = None, fig_size: (int, int) = (10,10), triage: bool = False, mode="linear_fast"):
+    '''
+    Wrapper for get_initial_slopes that accepts pint quantities.
+    TODO: in the future, ditch this and make get_initial_slopes robust to pint quantities.
+    '''
+    #convert to numpy arrays:
+    time_arr = time_arr.to('s').magnitude
+    kinetic_data = kinetic_data.to('uM').magnitude
+    substrate_concs = substrate_concs.to('uM').magnitude
+
+    slopes, scores = get_initial_slopes(time_arr, kinetic_data, plot=plot, substrate_concs=substrate_concs, title=title, fig_size=fig_size, triage=triage, mode=mode)
+
+    #convert back to pint quantities:
+    slopes = slopes * pint.Unit('uM/s')
+    scores = scores * pint.Unit('dimensionless')
+
+    return slopes, scores
 
 def fit_and_plot_michaelis_menten(rep_1_slopes: np.array, rep_2_slopes: np.array, sub_concs: [float], 
                                    e_conc: float, conc_units: str, title: str, background_rates: np.array = None):
