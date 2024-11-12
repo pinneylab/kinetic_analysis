@@ -1,5 +1,5 @@
-import math
 import numpy as np
+from scipy.stats import linregress
 from sklearn.linear_model import LinearRegression
 from scipy.optimize import curve_fit
 from scipy.special import lambertw
@@ -27,18 +27,30 @@ class SingleExponentialModel:
         plateau0 = y[-1]
         span0 = y[0] - plateau0
         
-        mask = (y > plateau0) & (x > 0)
+        if y[-1] > y[0]:
+            mask = (y < plateau0) & (x > 0)
+        else:
+            mask = (y > plateau0) & (x > 0)
+
         k0 = (np.log((y[mask] - plateau0) / span0) / x[mask]).mean()
         p0 = np.array([k0, span0, plateau0])
 
         # compute fit
-        popt, pcov = curve_fit(SingleExponentialModel.single_exponential, x, y, p0=p0)
-        parameters = {
-            'k': popt[0],
-            'span': popt[1],
-            'plateau': popt[2],
-            'pcov': pcov
-        }
+        try:
+            popt, pcov = curve_fit(SingleExponentialModel.single_exponential, x, y, p0=p0)
+            parameters = {
+                'k': popt[0],
+                'span': popt[1],
+                'plateau': popt[2],
+                'pcov': pcov
+            }
+        except:
+            parameters = {
+                'k': np.nan,
+                'span': np.nan,
+                'plateau': np.nan,
+                'pcov': np.nan
+            }
 
         return parameters
 
@@ -71,23 +83,26 @@ class InitialRateModel(LinearModel):
     """
 
     def __init__(self):
-        super().__init__()
+        pass
 
-    def fit(self, x: np.ndarray, y: np.ndarray, min_included_percent: float = 2):
+    def fit(self, x: np.ndarray, y: np.ndarray, min_included_percent: float = 2, exhaustive: bool = False):
         """ 
         Wrapper function over pre-existing code for fitting initial rates.
         """
-        slope, intercept, r2 = compute_initial_reaction_slope_fast(x, y, min_included_percent=min_included_percent)
-        parameters = {
-            'slope': slope,
-            'intercept': intercept,
-            'r2': r2
-        }
+
+        if exhaustive:
+            pass
+
+        else:
+            slope, intercept, r2 = compute_initial_reaction_slope_fast(x, y, min_included_percent=min_included_percent)
+            parameters = {
+                'slope': slope[0],
+                'intercept': intercept,
+                'r2': r2[0]
+            }
+
         return parameters
     
-
-class KineticDataException(Exception):
-    pass
 
 class ContinuousLinearRegression:
     def __init__(self, X, Y):
@@ -183,6 +198,7 @@ class ContinuousLinearRegression:
         self.r_squared = 1 - SS_res/SS_tot
         return self.r_squared
 
+
 def divide_chunks(l, n):
     # Function to split a list 'l' into 'n' equal-sized chunks.
     # The function yields each chunk as a separate list.
@@ -197,6 +213,7 @@ def divide_chunks(l, n):
             end = start + chunk_size
         yield l[start:end]
         start = end
+
 
 def compute_initial_reaction_slope_fast(time_arr: np.array, 
                                    signal_arr: np.array,
@@ -258,225 +275,13 @@ def compute_initial_reaction_slope_fast(time_arr: np.array,
 
     # The fit with the highest R-squared value is selected as the best fit.
     max_r2_idx = np.argmax(scores)
-    
-    if scores[max_r2_idx] < 0.9:
-        return np.array([np.nan]),np.nan, np.array([np.nan])
 
     #old code expects an array of arrays for slopes. This should be fixed eventually.
     return slopes[max_r2_idx], intercepts[max_r2_idx], scores[max_r2_idx]
 
-def compute_initial_reaction_slope(time_arr: np.array, 
-                                   signal_arr: np.array,
-                                  min_included_percent: int = 2): 
-    """
-    Determines best linear fit to initial slope of data, by fitting regressions to 
-    all percentiles of the data--greater than some defined minimum--anchored at the origin.
-    
-    Args:
-        time_arr (np.array): array of assay read times
-        signal_arr (np.array): array of kinetic signal readouts
-        min_included_percent (int) = 5: minimum percent of data to be included 
-    
-    Returns:
-        slope, intercept, score ((float, float, float)): fit parameters of best fit
-        
-    """
-    # Need to triage further for different definitions of minimum
-    MIN_INCLUDED_DATA_POINTS = 3
-    
-    perc_concs = list(divide_chunks(signal_arr, 100))
-    perc_times = list(divide_chunks(time_arr, 100))
- 
-    scores = []
-    slopes = [] 
-    intercepts = []
-    
-    min_inclusion = max(len(perc_times) * min_included_percent // 100, MIN_INCLUDED_DATA_POINTS)
-    
-    #for i in range(len(perc_times), min_inclusion, -1):
-    for i in range(min_inclusion, len(perc_times), 1):
-        curr_times = np.concatenate(perc_times[:i])
-        curr_concs = np.concatenate(perc_concs[:i])
-        reg = LinearRegression().fit(np.array(curr_times).reshape(-1,1), curr_concs)
-        curr_score = reg.score(np.array(curr_times).reshape(-1,1), curr_concs)
-        scores.append(curr_score)
-        slopes.append(reg.coef_)
-        intercepts.append(reg.intercept_)
-    
-    if len(scores) == 0 and min_included_percent == 100:
-        reg = LinearRegression().fit(np.array(perc_times).reshape(-1,1), perc_concs)
-        curr_score = reg.score(np.array(perc_times).reshape(-1,1), perc_concs)
-        return reg.coef_.item(), reg.intercept_.item(), curr_score
-
-    # The fit with the highest R-squared value is selected as the best fit.
-    max_r2_idx = np.argmax(scores)
-    
-    if scores[max_r2_idx] < 0.9:
-        return np.array([np.nan]), np.nan, np.array([np.nan])
-    
-    return slopes[max_r2_idx], intercepts[max_r2_idx], scores[max_r2_idx]
-
-
-def get_scoop_filter_index(times: list, data: list):
-    # Find the index to filter data to remove the initial scooping artifact in kinetic measurements.
-    # The scooping artifact is the region where the curve decreases at the beginning of the reaction.
-    rate_of_change = np.array(data[1:]) - np.array(data[:-1])
-    try:
-        last_negative_index = np.where(rate_of_change < 0)[0][-1] + 1
-    except IndexError:
-        last_negative_index = 0
-    duration = max(times) - min(times)
-    max_time_cutoff = np.where(np.array(times) < (duration / 3))[0][-1]
-
-    return min(last_negative_index, max_time_cutoff)
-
-   
-def fit_kinetics_linear(row):
-    # Fit linear models to the initial slope of the kinetic data for each row (reaction) in the dataset.
-    # The function uses 'compute_initial_reaction_slope' to compute the initial slope fit,
-    # and 'get_scoop_filter_index' to determine the index to filter out the scooping artifact.
-    # It returns slope, intercept, and R-squared values for both the entire reaction and the filtered part.
-    try:
-        slope, intercept, score = compute_initial_reaction_slope(row['time_s'],row['chamber_product_concs'])
-    except ValueError:
-        
-        slope = np.array([np.nan])
-        intercept = np.array([np.nan])
-        score = np.array([np.nan])
-            
-    filter_scoop_index = get_scoop_filter_index(row['time_s'],row['chamber_product_concs'])
-    try:
-        filter_slope, filter_intercept, filter_score = compute_initial_reaction_slope(row['time_s'][filter_scoop_index:],row['chamber_product_concs'][filter_scoop_index:])
-    except ValueError:
-        
-        filter_slope = np.array([np.nan])
-        filter_intercept = np.array([np.nan])
-        filter_score = np.array([np.nan])
-    return slope.item(), intercept.item(), score.item()**2, filter_slope.item(), filter_intercept.item(), filter_score.item()**2
 
 ### Functions I need to clean up still: ##############################
 # These are copied directly from the jupyter notebook for compatibility
-
-def get_initial_slopes(time_arr: np.array, kinetic_data: np.array, plot: bool = False,
-                       substrate_concs: [int] = None, 
-                       title: str = None, fig_size: (int, int) = (10,10), triage: bool = False, mode="linear_fast"):
-    
-    """
-    Fits best initial reaction rate linearly to all kinetic series provided. Optionally plots data for visualization
-    and triage.
-    
-    Args:
-        time_arr (np.array): array of assay read times
-        kinetic_data (np.array): array of kinetic signal readouts
-        plot (bool): flag to turn plotting of fit slopes to scattered data on or off
-        substrate_concs ([int]): optional list of substrate concentrations that must be included if plot==True
-        title (str): optional title for generated plots
-        fig_size ((int, int)): optional dimensions of generated plots
-        triage (bool): optional flag to turn on plot "triaging" which separates each substrate's initial rate fitting  
-        mode (str): modes for fitting initial slopes.
-            "linear": finds a linear fit to the initial slope of the data
-            "linear_fast": the same method as above, but much faster. This is the default.
-            "exponential": fits an exponential function to all of the data, and calculates the slope from the rate constant
-            "exponential_linear": the same as above, but the exponential function has a linear term added to account for evaporation and photobleaching.
-    
-    Returns:
-        slopes (np.array): array of initial slopes for each sub_array in the kinetic series
-        scores (np.array): array of R^2 values for each fit (coefficient of determination)
-        
-    """
-    if plot and (substrate_concs is None or title is None):
-        raise KineticDataException("Plotting initial slopes requires substratce concentration and titles")
-    
-    slopes = []
-    intercepts = []
-    scores = []
-    
-    if mode in ("linear", "linear_fast"):
-        for data in kinetic_data:
-            mask = ~np.isnan(data)
-            if mode == "linear":
-                slope, intercept, score = compute_initial_reaction_slope(time_arr[mask], data[mask])
-            else:
-                slope, intercept, score = compute_initial_reaction_slope_fast(time_arr[mask], data[mask])
-            #print(slope, intercept, score)
-            #compute_exponential_fit(time_arr[mask], data[mask])
-            slopes.append(slope)
-            intercepts.append(intercept)
-            scores.append(score)
-    elif mode in ("exponential", "exponential_linear"):
-        for data in kinetic_data:
-            #Do I need a NaN mask here?
-
-            #We want to exclude data after the reaction finishes. We first find the index where the smoothed data is at maximum (max_index)
-            window_size = 10
-            data_smooth = np.convolve(data, np.ones(window_size)/window_size, mode='valid')
-            #make sure we're not losing beginning and end of data
-            data_smooth = np.append(data_smooth, data[-window_size+1:])
-            max_index = np.argmax(data_smooth)
-
-            #we truncate the data to this point:
-            data_trunc = data[:max_index]
-            time_trunc = time_arr[:max_index]
-
-            #calculate the y intercept, and fit:
-            y_intercept = data_trunc[0] #the cheap way to do this is to just use the first data point as the y-intercept
-            if mode=="exponential":
-                S0, k, pcov= compute_exponential_fit(time_trunc, data_trunc, y_intercept)
-            else:
-                S0, k, e, pcov= compute_exponential_fit(time_trunc, data_trunc, y_intercept, add_linear=True)
-            
-            #calculate the slope from substrate conc, rate constant:
-            V0 = S0*k
-
-            slopes.append(np.array([V0]))
-            intercepts.append(y_intercept)
-            scores.append(pcov)
-    else:
-        raise KineticDataException("Mode must be either 'linear', 'exponential', or 'exponential_linear'")
-        
-    if plot:
-       
-        #we'll plot the points in the first 20% of time, for easy visualization.
-        max_time = max(time_arr)
-        twenty_percent_time = max_time * 0.2
-        mask = time_arr < twenty_percent_time
-
-        fig = plt.figure(figsize=fig_size) 
-        
-        for data in kinetic_data:
-            
-            plt.scatter(time_arr[mask], data[mask])
-            #plt.scatter(time_arr, data)
-        x = np.linspace(min(time_arr[mask]), max(time_arr[mask]), 1000)
-
-        x_tiled = np.tile(x,(len(substrate_concs),1)).T
-        plt.plot(x_tiled,
-                 x_tiled * np.array(slopes).T + np.array(intercepts).T,
-                 linewidth=3, label=[f"{sub_conc:.2f} µM" for sub_conc in substrate_concs])
-        plt.title(title)
-        plt.xlabel("Time (seconds)")
-        plt.ylabel("µM")
-        plt.legend() 
-    
-        if triage:
-
-            fig, axs = plt.subplots(math.ceil(len(substrate_concs) / 2), 2, figsize=(15,15))
-
-            for ax, data, slope, intercept, sub_conc in zip(axs.flat, kinetic_data, slopes, intercepts, substrate_concs):
-                
-                ax.scatter(time_arr[:len(time_arr)//5] , data[:len(time_arr)//5])
-                ax.set_title(f"{sub_conc:.2f} µM")
-                ax.plot(x[:len(x)//5], x[:len(x)//5] * slope + intercept)
-    
-    #Check if any slopes are NaN. If so, output descriptive warning:
-    for i in range(len(slopes)):
-        if np.isnan(slopes[i]):
-            # print(f"WARNING: slope for {substrate_concs[i]} µM is NaN.\n\ 
-            #         This is likely due to scipy failing to fit a linear model to the data.\n")
-            print(f"WARNING: slope for {substrate_concs[i]} µM is NaN.\n This is likely due to scipy failing to fit a linear model to the data.")
-    
-    #print(slopes)
-    return np.concatenate(slopes), np.concatenate(scores)
 
 
 def fit_michaelis_menten_lambert_omega(time_arr: np.array, kinetic_data: np.array, plot: bool = False,
