@@ -1,8 +1,34 @@
 import numpy as np
 from scipy.stats import linregress
 from sklearn.linear_model import LinearRegression
-from scipy.optimize import curve_fit
+from scipy.optimize import curve_fit, minimize
 from scipy.special import lambertw
+
+
+class BindingModel:
+    def __init__(self):
+        pass 
+
+    def __call__(self):
+        pass 
+
+    @staticmethod 
+    def binding_model(x: np.ndarray, kd: float, rmax: float):
+        pass
+
+    def fit(x, y, fixed_rmax: float = None):
+
+        def objective(p):
+            kd, rmax = p
+            yhat = BindingModel.binding_model(x, kd, rmax)
+            pass 
+
+        if fixed_rmax:
+            objective = lambda kd: objective(np.array([kd, fixed_rmax]))
+
+        result = minimize(objective, x, y, p0=np.array([1,1]))
+
+        pass 
 
 
 class SingleExponentialModel:
@@ -197,6 +223,36 @@ class ContinuousLinearRegression:
         SS_tot = self.y_squared_sum - 2*self.y_avg*self.y_sum + self.n*self.y_avg**2
         self.r_squared = 1 - SS_res/SS_tot
         return self.r_squared
+
+
+class MichaelisMentenModel:
+    def __init__(self):
+        pass
+
+    def __call__(self, x: np.ndarray, parameters: dict):
+        kcat, km = parameters['kcat'], parameters['km']
+        return MichaelisMentenModel.michaelis_menten_model(x, kcat, km)
+
+    @staticmethod
+    def michaelis_menten_model(x: np.ndarray, kcat: float, km: float):
+        return x * kcat / (km + x)
+
+    def fit(self, x: np.ndarray, y: np.ndarray):
+
+        try: 
+            popt, pcov = curve_fit(MichaelisMentenModel.michaelis_menten_model, x, y)
+            parameters = {
+                'kcat': popt[0],
+                'km': popt[1],
+                'pcov': pcov
+            }
+        except:
+            parameters = {
+                'kcat': np.nan,
+                'km': np.nan,
+                'pcov': np.nan
+            }
+        return parameters
 
 
 def divide_chunks(l, n):
