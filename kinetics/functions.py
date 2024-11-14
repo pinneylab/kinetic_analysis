@@ -9,26 +9,43 @@ class BindingModel:
     def __init__(self):
         pass 
 
-    def __call__(self):
-        pass 
+    def __call__(self, x: np.ndarray, params: dict):
+        kd, rmax = params['kd'], params['rmax']
+        return BindingModel.binding_model(x, kd, rmax) 
 
     @staticmethod 
     def binding_model(x: np.ndarray, kd: float, rmax: float):
-        pass
+        return rmax * x / (kd + x)
 
-    def fit(x, y, fixed_rmax: float = None):
+    def fit(self, x, y, fixed_rmax: float = None):
 
         def objective(p):
             kd, rmax = p
             yhat = BindingModel.binding_model(x, kd, rmax)
-            pass 
+            sse = np.square(y - yhat).sum()
+            return sse
 
         if fixed_rmax:
-            objective = lambda kd: objective(np.array([kd, fixed_rmax]))
+            objective_wrapper = lambda kd: objective([kd, fixed_rmax])
+            result = minimize(objective_wrapper, x0=1)
+            params = {
+                'kd': result.x[0],
+                'rmax': fixed_rmax,
+                'kd_stderr': std_err_from_hess_inv(result.hess_inv),
+                'rmax_stderr': np.nan
+            }
 
-        result = minimize(objective, x, y, p0=np.array([1,1]))
+        else:
+            result = minimize(objective, x0=np.array([1,1]))
+            std_err = std_err_from_hess_inv(result.hess_inv)
+            params = {
+                'kd': result.x[0],
+                'rmax': result.x[1],
+                'kd_stderr': std_err[0],
+                'rmax_stderr': std_err[1]
+            }
 
-        pass 
+        return params
 
 
 class SingleExponentialModel:
@@ -238,7 +255,6 @@ class MichaelisMentenModel:
         return x * kcat / (km + x)
 
     def fit(self, x: np.ndarray, y: np.ndarray):
-
         try: 
             popt, pcov = curve_fit(MichaelisMentenModel.michaelis_menten_model, x, y)
             parameters = {
@@ -253,6 +269,9 @@ class MichaelisMentenModel:
                 'pcov': np.nan
             }
         return parameters
+
+
+def std_err_from_hess_inv(hess_inv): return np.sqrt(np.diag(hess_inv))
 
 
 def divide_chunks(l, n):
