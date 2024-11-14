@@ -24,25 +24,33 @@ class BindingModel:
             yhat = BindingModel.binding_model(x, kd, rmax)
             sse = np.square(y - yhat).sum()
             return sse
+        
+        try:
+            if fixed_rmax:
+                objective_wrapper = lambda kd: objective([kd, fixed_rmax])
+                result = minimize(objective_wrapper, x0=1)
+                params = {
+                    'kd': result.x[0],
+                    'rmax': fixed_rmax,
+                    'kd_stderr': std_err_from_hess_inv(result.hess_inv),
+                    'rmax_stderr': np.nan
+                }
 
-        if fixed_rmax:
-            objective_wrapper = lambda kd: objective([kd, fixed_rmax])
-            result = minimize(objective_wrapper, x0=1)
+            else:
+                result = minimize(objective, x0=np.array([1,1]))
+                std_err = std_err_from_hess_inv(result.hess_inv)
+                params = {
+                    'kd': result.x[0],
+                    'rmax': result.x[1],
+                    'kd_stderr': std_err[0],
+                    'rmax_stderr': std_err[1]
+                }
+        except:
             params = {
-                'kd': result.x[0],
-                'rmax': fixed_rmax,
-                'kd_stderr': std_err_from_hess_inv(result.hess_inv),
+                'kd': np.nan,
+                'rmax': np.nan,
+                'kd_stderr': np.nan,
                 'rmax_stderr': np.nan
-            }
-
-        else:
-            result = minimize(objective, x0=np.array([1,1]))
-            std_err = std_err_from_hess_inv(result.hess_inv)
-            params = {
-                'kd': result.x[0],
-                'rmax': result.x[1],
-                'kd_stderr': std_err[0],
-                'rmax_stderr': std_err[1]
             }
 
         return params
