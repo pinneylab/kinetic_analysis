@@ -449,3 +449,5 @@ def fit_michaelis_menten_lambert_omega(time_arr: np.array, kinetic_data: np.arra
         axs[1].set_xlabel('Substrate Concentration (uM)')
         axs[1].set_ylabel('Km (uM)')
         axs[1].set_title(title)
+
+        
