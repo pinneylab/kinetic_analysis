@@ -6,5 +6,4 @@ jobs:
     steps:
       - uses: actions/checkout@main
       - run: pip install .
-      - run: pip install pytest
       - run: pytest -v
