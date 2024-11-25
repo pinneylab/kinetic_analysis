@@ -20,7 +20,7 @@ async function fetchAndPlotData(i) {
     const dataBatch = await response.json();
 
     dataBatch.forEach(data => {
-        Plotly.newPlot(`cell-${data['i']}-${data['j']}`, [data['plotting_data']], data['layout'], { responsive: true, autosize: true });
+        Plotly.newPlot(`cell-${data['i']}-${data['j']}`, data['plotting_data'], data['layout'], { responsive: true, autosize: true });
     });
 
 };

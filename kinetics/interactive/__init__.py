@@ -4,7 +4,27 @@ import os
 
 base_dir = os.path.abspath(os.path.dirname(__file__))
 
-def _batch_data(xdata, ydata, titles, n_rows, n_cols):
+def _batch_data(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_cols):
+    
+    assert len(xdata) == len(ydata)
+
+    fit_traces = False
+    if len(fits) > 0:
+        assert len(fits) == len(xdata)
+        assert model
+        fit_traces = True
+    else:
+        fits = [None] * len(xdata)
+    
+    if len(titles) > 0:
+        assert len(titles) == len(xdata)
+    else:
+        titles = list(range(len(xdata)))
+
+    if len(inclusion_masks) > 0:
+        assert len(inclusion_masks) == len(xdata)
+    else:
+        inclusion_masks = [[True] * len(x) for x in xdata]
 
     # compute grid
     n_panels = n_cols * n_rows
@@ -13,16 +33,29 @@ def _batch_data(xdata, ydata, titles, n_rows, n_cols):
 
     # get data for plotting
     data = []
-    for x, y, t, (i, j) in zip(xdata, ydata, titles, subplot_indices):
+    for x, y, m, f, t, (i, j) in zip(xdata, ydata, inclusion_masks, fits, titles, subplot_indices):
         d = {}
         d['i'], d['j'] = i, j
-        d['layout'] = {'title': {'text': t, 'font': {'size': 14}}, 'margin': {'l': 50, 'r': 50, 't': 50, 'b': 50}}
+        d['layout'] = {'title': {'text': t, 'font': {'size': 14}}, 'margin': {'l': 50, 'r': 50, 't': 50, 'b': 50}, 'showlegend': False}
 
-        d['plotting_data'] = {
+        d['plotting_data'] = [] 
+        d['plotting_data'].append({
             'x': x.tolist(),
             'y': y.tolist(),
-            'mode': 'markers'
-        }
+            'mode': 'markers',
+            'inclusion_mask': m
+        })
+
+        if fit_traces:
+            x_plot = np.linspace(min(x), max(x), 1000)
+            d['plotting_data'].append({
+                'x': x_plot.tolist(),
+                'y': model(x_plot, f).tolist(),
+                'mode': 'lines',
+                'type': 'scatter',
+                'line': {'color': 'black'}
+            })
+
         data.append(d)
 
     # batch data
@@ -31,9 +64,9 @@ def _batch_data(xdata, ydata, titles, n_rows, n_cols):
     return batched_data
 
 
-def _init_app(xdata, ydata, titles, n_rows, n_cols, xlabel, ylabel):
+def _init_app(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_cols, xlabel, ylabel):
 
-    batched_data = _batch_data(xdata, ydata, titles, n_rows, n_cols)
+    batched_data = _batch_data(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_cols)
     app = Flask(__name__, template_folder=os.path.join(base_dir, 'templates'), static_folder=os.path.join(base_dir, 'static'))
 
     @app.route('/')
@@ -53,6 +86,20 @@ def _init_app(xdata, ydata, titles, n_rows, n_cols, xlabel, ylabel):
     return app
 
 
-def plot_data(xdata, ydata, titles, n_rows, n_cols, xlabel, ylabel):
-    app = _init_app(xdata, ydata, titles, n_rows, n_cols, xlabel, ylabel)
+def plot_data(
+        xdata, 
+        ydata, 
+        model = None, 
+        fits: list = [],
+        titles: list = [], 
+        n_rows: int = 2, 
+        n_cols: int = 3, 
+        xlabel: str = 'x', 
+        ylabel: str = 'y'
+        ):
+    
+    # TODO: allow for masking of individual points
+    inclusion_masks = []
+
+    app = _init_app(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_cols, xlabel, ylabel)
     app.run(debug=False, use_reloader=False)
