@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Grid Visualization</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+
+    <div class="figure-container" id="figure-container"></div>
+    <div id="slider-container" class="slider-container">
+        <input min="0" value="0" id="slider" type="range">
+        <slider-label id="slider-label">0</slider-label>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
+
+    <script>        
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+
+                // load constants from the server
+                let rows = {{ rows }};
+                let cols = {{ cols }};
+                let panels = {{ panels }};
+                let xlabel = {{ xlabel|tojson }};
+                let ylabel = {{ ylabel|tojson }};
+                await init(rows, cols, panels, xlabel, ylabel);
+
+            } catch (error) {
+                console.error('Error initializing application:', error);
+            }
+        });
+
+    </script>
+</body>
+</html>
