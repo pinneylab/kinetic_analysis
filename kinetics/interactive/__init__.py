@@ -4,6 +4,7 @@ import os
 
 base_dir = os.path.abspath(os.path.dirname(__file__))
 
+
 def _batch_data(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_cols):
     
     assert len(xdata) == len(ydata)
@@ -36,7 +37,7 @@ def _batch_data(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_co
     for x, y, m, f, t, (i, j) in zip(xdata, ydata, inclusion_masks, fits, titles, subplot_indices):
         d = {}
         d['i'], d['j'] = i, j
-        d['layout'] = {'title': {'text': t, 'font': {'size': 14}}, 'margin': {'l': 50, 'r': 50, 't': 50, 'b': 50}, 'showlegend': False}
+        d['layout'] = {'title': {'text': t, 'font': {'size': 14}}, 'margin': {'l': 40, 'r': 40, 't': 40, 'b': 40}, 'showlegend': False}
 
         d['plotting_data'] = [] 
         d['plotting_data'].append({
@@ -86,7 +87,7 @@ def _init_app(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_cols
     return app
 
 
-def plot_data(
+def launch_interactive_plot(
         xdata, 
         ydata, 
         model = None, 
@@ -95,11 +96,92 @@ def plot_data(
         n_rows: int = 2, 
         n_cols: int = 3, 
         xlabel: str = 'x', 
-        ylabel: str = 'y'
+        ylabel: str = 'y',
         ):
     
     # TODO: allow for masking of individual points
     inclusion_masks = []
 
+    # TODO: enable user to toggle between linear and log axis scaling
+    xscale = 'linear'
+    yscale = 'linear'
+
+    # TODO: enable user to set the range of x and y axes
+    xrange = (None, None)
+    yrange = (None, None)
+
     app = _init_app(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_cols, xlabel, ylabel)
+    app.run(debug=False, use_reloader=False)
+
+
+def _init_model_simulator_app(xarray, model, params, yarray, xlabel, ylabel, zlabel, surface_plot, slider_config):
+
+    # render HTML template
+    # sliders
+    app = Flask(
+        __name__, 
+        template_folder=os.path.join(base_dir, 'templates'), 
+        static_folder=os.path.join(base_dir, 'static'),
+        )
+    
+
+    @app.route('/send_data', methods=['GET'])
+    def send_data():
+        response_data = {
+            "params": params,
+            "xarray": xarray.tolist(),
+            "yarray": yarray.tolist(),
+            "slider_config": slider_config
+        }
+        return jsonify(response_data)  # Send the data as JSON
+
+
+    @app.route('/')
+    def index():
+        """Render the main page with navigation."""
+        return render_template(
+            'model_simulator.html', 
+            xarray=xarray.tolist(),
+            params=params,
+            yarray=yarray.tolist(),
+            xlabel=xlabel,
+            ylabel=ylabel,
+            zlabel=zlabel,
+            surface_plot=surface_plot
+            )
+
+
+    @app.route('/simulate', methods=['POST'])
+    def simulate():
+        params = request.get_json()
+        prediction = model(xarray, yarray, params) if surface_plot else model(xarray, params)
+        return jsonify({'prediction': prediction.tolist()}), 200
+    
+    return app
+    
+
+def launch_model_simulator(
+    xarray: np.ndarray,
+    model,
+    params: dict,
+    yarray: np.ndarray = np.array([]),
+    xlabel: str = 'x',
+    ylabel: str = 'y',
+    zlabel: str = 'z',
+    slider_config: dict = {},
+):
+    
+    assert isinstance(xarray, np.ndarray) and isinstance(yarray, np.ndarray), 'X and Y arrays must be numpy arrays.'
+    
+    surface_plot = False
+    if yarray.shape != (0, ):
+        assert xarray.shape == yarray.shape, 'X and Y arrays must be the same size.'
+        surface_plot = True
+
+    for param_name, param_value in params.items():
+        if param_name in slider_config.keys():
+            continue
+        slider_config[param_name] = {'scale': 'log', 'min': 0, 'max': 1000, 'stepsize': 1}
+
+    app = _init_model_simulator_app(xarray, model, params, yarray, xlabel, ylabel, zlabel, surface_plot, slider_config)
     app.run(debug=False, use_reloader=False)

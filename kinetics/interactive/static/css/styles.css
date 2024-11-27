@@ -1,8 +1,35 @@
-.figure-container {
+#figure-primary-container {
     height: 90vh;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+#figure-secondary-container {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    justify-content: center;
+    align-items: center;
+}
+
+#ylabel {
+    transform: rotate(270deg);
+    display: inline-block;
+    padding-top: 0.5%;
+}
+
+#subplot-container {
+    width: 100%;
     display: flex;
     flex-wrap: wrap;
-    /* flex-direction: column; */
+}
+
+#xlabel {
+    height: 2%;
+    padding-bottom: 2%;
 }
 
 .row {

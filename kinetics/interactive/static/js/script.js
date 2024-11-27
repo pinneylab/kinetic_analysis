@@ -29,8 +29,16 @@ async function fetchAndPlotData(i) {
 async function initGrid(rows, cols, xlabel, ylabel) {
 
     // TODO: add containers for xlabel and ylabel and corresponding text
+    const figureContainerPrimary = document.getElementById('figure-container-primary');
+    const figureContainerSecondary = document.getElementById('figure-container-secondary');
+    const subplotContainer = document.getElementById('subplot-container');
 
-    const plotContainer = document.getElementById('figure-container');
+    // Set x and y labels
+    const xlabelElement = document.getElementById('xlabel');
+    xlabelElement.textContent = xlabel;
+    const ylabelElement = document.getElementById('ylabel');
+    ylabelElement.textContent = ylabel;
+
     const fragment = document.createDocumentFragment();
 
     for (let i = 0; i < rows; i++) {
@@ -47,7 +55,7 @@ async function initGrid(rows, cols, xlabel, ylabel) {
         }
         fragment.appendChild(row);
     }
-    plotContainer.appendChild(fragment);
+    subplotContainer.appendChild(fragment);
 }
 
 

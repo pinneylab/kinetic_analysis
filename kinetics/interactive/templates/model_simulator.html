@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Model Simulator</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <!-- <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}"> -->
+</head>
+<body>
+
+    <div id="figure-primary-container">
+        <div id="figure-secondary-container">
+            <div id="ylabel"></div>
+            <div id="plot-container"></div>
+        </div>
+        <div id="xlabel"></div>
+    </div>
+
+    <div id="slider-container-primary"></div>
+
+    <script>        
+
+        // load constants from the server        
+        const xlabel = {{ xlabel|tojson }};
+        const ylabel = {{ ylabel|tojson }};
+        const zlabel = {{ zlabel|tojson }};
+        const surfacePlot = {{ surface_plot|tojson }};
+
+
+        async function fetchData() {
+            const url = '/send_data';
+            try {
+                const response = await fetch(url);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    return data;
+                } else {
+                    console.error('Server error:', response.statusText);
+                }
+            } catch (error) {
+                console.error('Fetch error:', error);
+            }
+        };
+
+
+        function initPlottingData(xarray, yarray, surfacePlot, xlabel, ylabel, zlabel) {
+            plottingData = [];
+
+            if (surfacePlot) {
+                plottingData.push({
+                    x: xarray,
+                    y: yarray, 
+                    z: [],
+                    mode: 'scatter',
+                })
+                layout = {
+                    title: 'Title',
+                    xaxis: {title: xlabel},
+                    yaxis: {title: ylabel},
+                    zaxis: {title: zlabel}
+                }
+            } else {
+                plottingData.push({
+                    x: xarray,
+                    y: [], 
+                    mode: 'scatter',
+                })
+                layout = {
+                    title: 'Title',
+                    xaxis: {title: xlabel},
+                    yaxis: {title: ylabel},
+                }
+            }
+            return [plottingData, layout]
+        }
+
+
+        async function simulateAndPlot(params) {
+            // sends request to server
+            const response = await fetch('/simulate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(params),
+            });
+
+            console.log(response);
+            let prediction = await response.json();
+            prediction = prediction['prediction'];
+            console.log(prediction);
+
+            if (surfacePlot) {
+                plottingData[0]['z'] = prediction
+            } else {
+                plottingData[0]['y'] = prediction
+            }
+
+            Plotly.newPlot('plot-container', plottingData, layout,{ responsive: true, autosize: true });
+
+        }
+
+
+        function initSliders(params, sliderConfig) {
+            const primaryContainer = document.getElementById('slider-container-primary');
+
+            for (const [paramName, paramValue] of Object.entries(params)) {
+                const secondaryContainer = document.createElement('div');
+                secondaryContainer.className = 'slider-container-secondary';
+
+                const label = document.createElement('label');
+                label.textContent = `${paramName}`;
+
+                const config = sliderConfig[paramName];
+
+                const slider = document.createElement('input')
+                slider.type = 'range';
+                slider.min = `${config.min}`;
+                slider.max = `${config.max}`;
+                slider.step = `${config.stepsize}`;
+                slider.value = paramValue;
+
+                if (config.scale == 'log') {
+                    slider.value = Math.log10(paramValue);
+                }
+
+                const output = document.createElement('span');
+                output.textContent = paramValue;
+
+                slider.addEventListener('input', () => {
+                    let value = parseFloat(slider.value)
+
+                    if (config.scale == 'log') {
+                        value = 10**value;
+                    }
+
+                    output.textContent = value.toFixed(2);
+                    params[paramName] = value;
+                    console.log(params);
+                    simulateAndPlot(params);
+                });
+
+                secondaryContainer.appendChild(label);
+                secondaryContainer.appendChild(slider);
+                secondaryContainer.appendChild(output);
+                primaryContainer.appendChild(secondaryContainer);
+            }
+        };
+
+        let data;
+        (async () => {
+            try {
+                data = await fetchData();
+                const xarray = data.xarray;
+                const yarray = data.yarray;
+                let params = data.params;
+                const sliderConfig = data.slider_config;
+
+                let [plottingData, layout] = initPlottingData(xarray, yarray, surfacePlot, xlabel, ylabel, zlabel)
+
+                initSliders(params, sliderConfig);
+                simulateAndPlot(params);
+
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            }
+        })();
+
+    </script>
+
+</body>
+</html>
