@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify
+import logging
 import numpy as np
 import os
 
@@ -70,6 +71,10 @@ def _init_app(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_cols
     batched_data = _batch_data(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_cols)
     app = Flask(__name__, template_folder=os.path.join(base_dir, 'templates'), static_folder=os.path.join(base_dir, 'static'))
 
+    # Suppress Werkzeug logs
+    # log = logging.getLogger('werkzeug')
+    # log.setLevel(logging.ERROR)  # Suppress all logs below ERROR level
+
     @app.route('/')
     def index():
         """Render the main page with navigation."""
@@ -123,6 +128,10 @@ def _init_model_simulator_app(xarray, model, params, yarray, xlabel, ylabel, zla
         template_folder=os.path.join(base_dir, 'templates'), 
         static_folder=os.path.join(base_dir, 'static'),
         )
+    
+    # Suppress Werkzeug logs
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)  # Suppress all logs below ERROR level
     
 
     @app.route('/send_data', methods=['GET'])

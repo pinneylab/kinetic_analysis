@@ -5,6 +5,14 @@
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <!-- <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}"> -->
 </head>
+
+<style>
+    #plot-container {
+        width: 100vw;
+        height: 90vh;
+    }
+</style>
+
 <body>
 
     <div id="figure-primary-container">
@@ -51,7 +59,8 @@
                     x: xarray,
                     y: yarray, 
                     z: [],
-                    mode: 'scatter',
+                    type: 'surface',
+                    mode: 'markers',
                 })
                 layout = {
                     title: 'Title',
@@ -96,7 +105,7 @@
                 plottingData[0]['y'] = prediction
             }
 
-            Plotly.newPlot('plot-container', plottingData, layout,{ responsive: true, autosize: true });
+            Plotly.newPlot('plot-container', plottingData, layout);
 
         }
 
