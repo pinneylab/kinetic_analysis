@@ -108,6 +108,68 @@ class SingleExponentialModel:
         return parameters
 
 
+class DoubleExponentialModel:
+    """ 
+    Class for fitting exponential models to progress curve data.
+
+    NOTE: Might need to consider a more flexible approach for computing
+    the initial guess for the fit. The current approach may or may not 
+    work depending on the data.
+    """
+
+    def __init__(self):
+        pass
+
+    def __call__(self, x: np.ndarray, parameters: dict):
+        k1, span1, k2, span2, plateau = parameters['k1'], parameters['span1'], parameters['k2'], parameters['span2'], parameters['plateau']
+        return DoubleExponentialModel.double_exponential(x, k1, span1, k2, span2, plateau)
+    
+    @staticmethod
+    def double_exponential(x: np.ndarray, k1: float, span1: float, k2: float, span2: float, plateau: float):
+        return (span1 * np.exp(k1 * x)) + (span2 * np.exp(k2 * x)) + plateau
+    
+    def fit(self, x: np.ndarray, y: np.ndarray):
+
+        # compute initial guesses
+        plateau0 = y[-1]
+        span0 = y[0] - plateau0
+        span1_0, span2_0 = span0 * 0.9, span0 * 0.1
+
+        if y[-1] > y[0]:
+            mask = (y < plateau0) & (x > 0)
+        else:
+            mask = (y > plateau0) & (x > 0)
+
+        k0 = (np.log((y[mask] - plateau0) / span0) / x[mask]).mean()
+        k1_0, k2_0 = k0 * 0.9, k0 * 0.1
+        
+        p0 = np.array([k1_0, span1_0, k2_0, span2_0, plateau0])
+
+        # compute fit
+        try:
+            popt, pcov = curve_fit(DoubleExponentialModel.double_exponential, x, y, p0=p0)
+            parameters = {
+                'k1': popt[0],
+                'span1': popt[1],
+                'k2': popt[2],
+                'span2': popt[3],
+                'plateau': popt[4],
+                'pcov': pcov
+            }
+        except RuntimeError:
+            print('Warning: a good fit to the data could not be found. Setting parameters as np.nan.')
+            parameters = {
+                'k1': np.nan,
+                'span1': np.nan,
+                'k2': np.nan,
+                'span2': np.nan,
+                'plateau': np.nan,
+                'pcov': np.nan
+            }
+
+        return parameters
+
+
 class LinearModel:
     """ 
     Wrapper class over scipy.stats.linregress for fitting lines to data.
