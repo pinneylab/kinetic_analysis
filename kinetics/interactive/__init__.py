@@ -6,9 +6,16 @@ import os
 base_dir = os.path.abspath(os.path.dirname(__file__))
 
 
-def _batch_data(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_cols):
+def _batch_data(xdata, ydata, zdata, inclusion_masks, model, fits, titles, n_rows, n_cols):
     
     assert len(xdata) == len(ydata)
+
+    surface = False
+    if len(zdata) > 0:
+        assert len(zdata) == len(xdata)
+        surface = True
+    else:
+        zdata = np.full((len(xdata), len(xdata[0])), None)
 
     fit_traces = False
     if len(fits) > 0:
@@ -35,7 +42,7 @@ def _batch_data(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_co
 
     # get data for plotting
     data = []
-    for x, y, m, f, t, (i, j) in zip(xdata, ydata, inclusion_masks, fits, titles, subplot_indices):
+    for x, y, z, m, f, t, (i, j) in zip(xdata, ydata, zdata, inclusion_masks, fits, titles, subplot_indices):
         d = {}
         d['i'], d['j'] = i, j
         d['layout'] = {'title': {'text': t, 'font': {'size': 14}}, 'margin': {'l': 40, 'r': 40, 't': 40, 'b': 40}, 'showlegend': False}
@@ -44,6 +51,8 @@ def _batch_data(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_co
         d['plotting_data'].append({
             'x': x.tolist(),
             'y': y.tolist(),
+            'z': z.tolist(),
+            'type': 'scatter' if not surface else 'scatter3d', 
             'mode': 'markers',
             'inclusion_mask': m
         })
@@ -66,9 +75,9 @@ def _batch_data(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_co
     return batched_data
 
 
-def _init_app(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_cols, xlabel, ylabel):
+def _init_app(xdata, ydata, zdata, inclusion_masks, model, fits, titles, n_rows, n_cols, xlabel, ylabel):
 
-    batched_data = _batch_data(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_cols)
+    batched_data = _batch_data(xdata, ydata, zdata, inclusion_masks, model, fits, titles, n_rows, n_cols)
     app = Flask(__name__, template_folder=os.path.join(base_dir, 'templates'), static_folder=os.path.join(base_dir, 'static'))
 
     # Suppress Werkzeug logs
@@ -95,6 +104,7 @@ def _init_app(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_cols
 def launch_interactive_plot(
         xdata, 
         ydata, 
+        zdata: list = [],
         model = None, 
         fits: list = [],
         titles: list = [], 
@@ -110,12 +120,14 @@ def launch_interactive_plot(
     # TODO: enable user to toggle between linear and log axis scaling
     xscale = 'linear'
     yscale = 'linear'
+    zscale = 'linear'
 
     # TODO: enable user to set the range of x and y axes
     xrange = (None, None)
     yrange = (None, None)
+    zrange = (None, None)
 
-    app = _init_app(xdata, ydata, inclusion_masks, model, fits, titles, n_rows, n_cols, xlabel, ylabel)
+    app = _init_app(xdata, ydata, zdata, inclusion_masks, model, fits, titles, n_rows, n_cols, xlabel, ylabel)
     app.run(debug=False, use_reloader=False)
 
 
