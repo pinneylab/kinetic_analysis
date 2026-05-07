@@ -17,7 +17,7 @@ class BindingModel:
     def binding_model(x: np.ndarray, kd: float, rmax: float):
         return rmax * x / (kd + x)
 
-    def fit(self, x, y, fixed_rmax: float = None):
+    def fit(self, x, y, fixed_rmax: float = None, verbose: bool = True):
 
         def objective(p):
             kd, rmax = p
@@ -46,7 +46,8 @@ class BindingModel:
             }
 
         if not result.success:
-            print('Warning: a good fit to the data could not be found. Setting parameters as np.nan.')
+            if verbose:
+                print('Warning: a good fit to the data could not be found. Setting parameters as np.nan.')
             params = {
                 'kd': np.nan,
                 'rmax': np.nan,
@@ -183,12 +184,24 @@ class LinearModel:
         return (x * slope) + intercept
 
     def fit(self, x: np.ndarray, y: np.ndarray):
-        result = linregress(x, y)
-        parameters = {
-            'slope': result.slope,
-            'intercept': result.intercept,
-            'r2': result.rvalue
-        }
+
+        if len(x) > 0:
+            result = linregress(x, y)
+            parameters = {
+                'slope': result.slope,
+                'intercept': result.intercept,
+                'slope_std': result.stderr,
+                'intercept_std': result.intercept_stderr,
+                'r2': result.rvalue
+            }
+        else:
+            parameters = {
+                'slope': np.nan,
+                'intercept': np.nan,
+                'slope_std': np.nan,
+                'intercept_std': np.nan,
+                'r2': np.nan
+            }
         return parameters
 
 

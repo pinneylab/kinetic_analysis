@@ -15,12 +15,20 @@ const fetchWithTimeout = async (resource, options = {}) => {
 };
 
 
-async function fetchAndPlotData(i) {
-    const response = await fetchWithTimeout(`/data/${i}`, { timeout: 3000 });
+async function fetchAndPlotData(index, rows, cols) {
+    const response = await fetchWithTimeout(`/data/${index}`, { timeout: 3000 });
     const dataBatch = await response.json();
 
-    dataBatch.forEach(data => {
-        Plotly.newPlot(`cell-${data['i']}-${data['j']}`, data['plotting_data'], data['layout'], { responsive: true, autosize: true });
+    // for (let i = 0; i < rows; i++) {
+    //     for (let j = 0; j < cols; j++) {
+    //         Plotly.newPlot(`cell-${i}-${j}`, data['plotting_data'], data['layout'], { responsive: true, autosize: true });
+    //     }
+    // }
+
+    dataBatch.forEach((data, index) => {
+        const rowIndex = Math.floor(index / cols)
+        const colIndex = (index % cols)
+        Plotly.newPlot(`cell-${rowIndex}-${colIndex}`, data['plotting_data'], data['layout'], { responsive: true, autosize: true });
     });
 
 };
@@ -59,7 +67,7 @@ async function initGrid(rows, cols, xlabel, ylabel) {
 }
 
 
-function initSlider(panels) {
+function initSlider(panels, rows, cols) {
 
     const slider = document.getElementById('slider');
     slider.max = panels - 1;
@@ -76,7 +84,7 @@ function initSlider(panels) {
         const now = Date.now();
         if (now - lastRequestTime >= throttleInterval) {
             lastRequestTime = now;
-            await fetchAndPlotData(value);
+            await fetchAndPlotData(value, rows, cols);
             sliderLabel.textContent = `${value}`
         }
     });
@@ -85,11 +93,10 @@ function initSlider(panels) {
 
 
 async function init(rows, cols, panels, xlabel, ylabel) {
-
     initGrid(rows, cols, xlabel, ylabel);
 
     // // TODO: figure out why this breaks slider behavior!
     // // Fetch and plot initial data
-    await fetchAndPlotData(0);
-    initSlider(panels);
+    await fetchAndPlotData(0, rows, cols);
+    initSlider(panels, rows, cols);
 };
